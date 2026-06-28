@@ -16,6 +16,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Imported for its side effect: registers every model on Base.metadata so
+# create_all() below actually creates their tables. Unused directly, hence
+# the noqa — this is the one place in the app where that's the intent, not
+# an oversight.
+from app import models  # noqa: F401,E402
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exception_handlers import register_exception_handlers

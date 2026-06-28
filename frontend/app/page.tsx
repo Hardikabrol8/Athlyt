@@ -1,15 +1,14 @@
+import Link from "next/link";
+
 import { BackendStatus } from "@/components/backend-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 /**
- * Placeholder home page for Project Setup.
- *
- * This intentionally is not the real marketing landing page — that's a later
- * feature. Its job right now is to prove three things work together: Tailwind
- * + shadcn/ui theming (light/dark), the folder structure, and a live call to
- * the FastAPI backend's health endpoint.
+ * Still a placeholder, not the real marketing landing page — that's a later
+ * feature, not part of Milestone 1. Its job right now is to confirm the
+ * stack is wired up and route into the real auth flow.
  */
 export default function Home() {
   return (
@@ -25,24 +24,19 @@ export default function Home() {
 
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Project setup</CardTitle>
-          <CardDescription>
-            Frontend, backend, and database are wired up. Features come next.
-          </CardDescription>
+          <CardTitle>Get started</CardTitle>
+          <CardDescription>Create an account or sign in to continue.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <BackendStatus />
           <div className="flex gap-2">
-            <Button className="flex-1" disabled>
-              Sign in
+            <Button asChild className="flex-1">
+              <Link href="/login">Sign in</Link>
             </Button>
-            <Button className="flex-1" variant="outline" disabled>
-              Create account
+            <Button asChild className="flex-1" variant="outline">
+              <Link href="/register">Create account</Link>
             </Button>
           </div>
-          <p className="text-center text-xs text-muted-foreground">
-            Auth arrives in the next feature.
-          </p>
         </CardContent>
       </Card>
     </main>
