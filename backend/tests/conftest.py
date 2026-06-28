@@ -14,8 +14,12 @@ os.environ.setdefault("ENVIRONMENT", "test")
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app import models  # noqa: F401  ensures every model is registered on Base.metadata
 from app.core.config import get_settings
+from app.db.base import Base
+from app.db.session import SessionLocal, engine
 from app.main import create_app
 
 
@@ -29,3 +33,19 @@ def app() -> FastAPI:
 def client(app: FastAPI) -> TestClient:
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def db() -> Session:
+    """A raw DB session for repository/service-level unit tests that don't
+    need a full HTTP client. `create_all` is called here too (not just via
+    the `app` fixture's lifespan) so tests using only this fixture work
+    regardless of whether a `client`-fixture test has already run in this
+    session — both calls are idempotent, so doing it twice is harmless.
+    """
+    Base.metadata.create_all(bind=engine)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()

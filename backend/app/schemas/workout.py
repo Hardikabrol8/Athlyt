@@ -1,0 +1,96 @@
+"""Schemas for the workout-plan hierarchy (`WorkoutPlan` → `WorkoutDay` →
+`WorkoutExercise`). No router uses these yet — only the CRUD services and
+their tests do, in this milestone. They exist now so the service layer's
+function signatures are already shaped the way a future API layer will need
+them, rather than being designed twice.
+"""
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.enums import FitnessGoal, WorkoutExperience
+from app.schemas.exercise import ExerciseResponse
+
+
+# --- WorkoutExercise -----------------------------------------------------------
+class WorkoutExerciseCreate(BaseModel):
+    exercise_id: str
+    sets: int = Field(ge=1, le=20)
+    reps: str = Field(min_length=1, max_length=20)
+    rest_seconds: int = Field(ge=0, le=600)
+    order_index: int = Field(ge=0)
+
+
+class WorkoutExerciseUpdate(BaseModel):
+    sets: int | None = Field(default=None, ge=1, le=20)
+    reps: str | None = Field(default=None, min_length=1, max_length=20)
+    rest_seconds: int | None = Field(default=None, ge=0, le=600)
+    order_index: int | None = Field(default=None, ge=0)
+
+
+class WorkoutExerciseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    workout_day_id: str
+    sets: int
+    reps: str
+    rest_seconds: int
+    order_index: int
+    exercise: ExerciseResponse
+
+
+# --- WorkoutDay ------------------------------------------------------------------
+class WorkoutDayCreate(BaseModel):
+    day_number: int = Field(ge=1, le=7)
+    day_name: str = Field(min_length=1, max_length=100)
+    focus_area: str = Field(min_length=1, max_length=100)
+
+
+class WorkoutDayUpdate(BaseModel):
+    day_number: int | None = Field(default=None, ge=1, le=7)
+    day_name: str | None = Field(default=None, min_length=1, max_length=100)
+    focus_area: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class WorkoutDayResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    workout_plan_id: str
+    day_number: int
+    day_name: str
+    focus_area: str
+    workout_exercises: list[WorkoutExerciseResponse] = []
+
+
+# --- WorkoutPlan -----------------------------------------------------------------
+class WorkoutPlanCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=150)
+    goal: FitnessGoal
+    experience: WorkoutExperience
+    workout_days: int = Field(ge=1, le=7)
+    active: bool = True
+
+
+class WorkoutPlanUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=150)
+    goal: FitnessGoal | None = None
+    experience: WorkoutExperience | None = None
+    workout_days: int | None = Field(default=None, ge=1, le=7)
+    active: bool | None = None
+
+
+class WorkoutPlanResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    title: str
+    goal: FitnessGoal
+    experience: WorkoutExperience
+    workout_days: int
+    active: bool
+    created_at: datetime
+    days: list[WorkoutDayResponse] = []

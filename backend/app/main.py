@@ -25,13 +25,17 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.db.base import Base
-from app.db.session import engine
+from app.db.seed_exercises import seed_exercises
+from app.db.session import SessionLocal, engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Create any tables that don't exist yet, once, at startup."""
+    """Create any tables that don't exist yet, then seed the exercise library
+    if it's empty — both safe to run on every startup, not just the first."""
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        seed_exercises(db)
     yield
 
 

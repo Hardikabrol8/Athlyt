@@ -6,7 +6,11 @@ in `app/main.py` to know about them. `main.py` imports this package for exactly
 that side effect.
 """
 
+from app.models.exercise import Exercise
 from app.models.profile import Profile
 from app.models.user import User
+from app.models.workout_day import WorkoutDay
+from app.models.workout_exercise import WorkoutExercise
+from app.models.workout_plan import WorkoutPlan
 
-__all__ = ["Profile", "User"]
+__all__ = ["Exercise", "Profile", "User", "WorkoutDay", "WorkoutExercise", "WorkoutPlan"]
