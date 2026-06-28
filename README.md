@@ -4,8 +4,7 @@
 
 Athlyt is an AI-powered fitness coach: personalized workout plans, diet plans,
 and progress tracking, with a machine learning model recommending workouts.
-Built as a placement-portfolio project — full-stack + ML, kept intentionally
-scoped to ship in a week rather than gold-plated.
+Built as a placement-portfolio project — full-stack + ML.
 
 ## Tech stack
 
