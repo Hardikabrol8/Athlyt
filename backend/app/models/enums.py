@@ -36,6 +36,17 @@ class WorkoutExperience(str, Enum):
     advanced = "advanced"
 
 
+class WorkoutSessionStatus(str, Enum):
+    """Lifecycle of a single `WorkoutSession` — one user's attempt at a
+    specific `WorkoutDay` on a specific occasion. `paused` exists so a user
+    can leave mid-workout and resume later without losing progress or the
+    accumulated active-time clock (see `WorkoutTrackingService`)."""
+
+    active = "active"
+    paused = "paused"
+    completed = "completed"
+
+
 class DietPreference(str, Enum):
     vegetarian = "vegetarian"
     non_vegetarian = "non_vegetarian"

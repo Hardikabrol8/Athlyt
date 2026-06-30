@@ -141,3 +141,45 @@ export interface GeneratedWorkoutPlanResponse extends WorkoutPlanResponse {
 export interface GenerateWorkoutRequest {
   workout_days_per_week: number;
 }
+
+// --- Workout Tracking (Milestone 2.5) -----------------------------------
+
+export type WorkoutSessionStatus = "active" | "paused" | "completed";
+
+export interface ExerciseCompletionResponse {
+  id: string;
+  workout_session_id: string;
+  workout_exercise_id: string;
+  completed_sets: number;
+  completed_reps: string | null;
+  completed: boolean;
+  skipped: boolean;
+  notes: string | null;
+}
+
+export interface WorkoutSessionResponse {
+  id: string;
+  user_id: string;
+  workout_plan_id: string;
+  workout_day_id: string;
+  status: WorkoutSessionStatus;
+  started_at: string;
+  completed_at: string | null;
+  total_duration_minutes: number | null;
+  calories_burned_estimate: number | null;
+  exercise_completions: ExerciseCompletionResponse[];
+}
+
+export interface FinishWorkoutResponse {
+  session: WorkoutSessionResponse;
+  total_duration_minutes: number;
+  exercises_completed: number;
+  exercises_skipped: number;
+  calories_burned_estimate: number;
+}
+
+export interface ExerciseCompletionRequest {
+  completed_sets?: number;
+  completed_reps?: string;
+  notes?: string;
+}

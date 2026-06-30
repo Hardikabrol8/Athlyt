@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 
 import { Badge } from "@/components/ui/badge";
+import { TiltCard } from "@/components/shared/tilt-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { WorkoutDayResponse } from "@/types/user";
@@ -35,9 +36,9 @@ export function WeeklyPlanCard({
         visible: { opacity: 1, y: 0 },
       }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      whileHover={{ y: -3 }}
       whileTap={{ scale: 0.98 }}
     >
+      <TiltCard intensity={5}>
       <Card
         role="button"
         tabIndex={0}
@@ -71,6 +72,7 @@ export function WeeklyPlanCard({
           <span>~{estimatedDurationMinutes} min</span>
         </CardContent>
       </Card>
+      </TiltCard>
     </motion.div>
   );
 }
