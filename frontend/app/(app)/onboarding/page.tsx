@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { PrimaryButton } from "@/components/shared/primary-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -76,8 +76,8 @@ export default function OnboardingPage() {
   });
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Card>
+    <div className="mx-auto max-w-2xl animate-fade-in-up">
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle>Set up your profile</CardTitle>
           <CardDescription>
@@ -340,9 +340,9 @@ export default function OnboardingPage() {
                 />
               </section>
 
-              <Button type="submit" className="w-full" disabled={mutation.isPending}>
+              <PrimaryButton type="submit" className="w-full" disabled={mutation.isPending}>
                 {mutation.isPending ? "Saving…" : "Complete profile"}
-              </Button>
+              </PrimaryButton>
             </form>
           </Form>
         </CardContent>

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { PrimaryButton } from "@/components/shared/primary-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,7 @@ export default function LoginPage() {
   });
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full shadow-lg">
       <CardHeader>
         <CardTitle>Welcome back</CardTitle>
         <CardDescription>Log in to continue your training.</CardDescription>
@@ -80,9 +80,9 @@ export default function LoginPage() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={mutation.isPending}>
+            <PrimaryButton type="submit" className="w-full" disabled={mutation.isPending}>
               {mutation.isPending ? "Signing in…" : "Sign in"}
-            </Button>
+            </PrimaryButton>
           </form>
         </Form>
         <p className="mt-6 text-center text-sm text-muted-foreground">
