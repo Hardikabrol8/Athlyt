@@ -54,8 +54,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/80 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
-        <span className="text-lg font-bold tracking-tight">Athlyt</span>
+      <header className="glass-card sticky top-0 z-10 flex items-center justify-between rounded-none border-x-0 border-t-0 px-4 py-3 sm:px-6 sm:py-4">
+        <span className="text-lg font-bold tracking-tight">
+          <span className="text-gradient-brand">Athlyt</span>
+        </span>
         <div className="flex items-center gap-2 sm:gap-3">
           {isLoading ? (
             <Skeleton className="h-5 w-24" />

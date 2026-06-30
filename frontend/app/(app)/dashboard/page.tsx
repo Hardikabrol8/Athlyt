@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 
+import { SectionHeader } from "@/components/shared/section-header";
 import { EmptyWorkoutState } from "@/components/workouts/empty-workout-state";
 import { ExerciseCard } from "@/components/workouts/exercise-card";
 import { TodaysWorkoutCard } from "@/components/workouts/todays-workout-card";
@@ -31,6 +33,14 @@ function todaysDayNumber(workoutDays: number): number {
   const isoWeekday = jsDay === 0 ? 7 : jsDay;
   return ((isoWeekday - 1) % workoutDays) + 1;
 }
+
+// Stagger container variants shared by the weekly-plan grid and the
+// exercise-detail grid — children declare their own `hidden`/`visible`
+// variants and inherit timing from whichever of these wraps them.
+const STAGGER_CONTAINER = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06 } },
+};
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -123,80 +133,117 @@ export default function DashboardPage() {
         <WelcomeCard profile={profile} metrics={metrics} plan={planNotFound ? null : (plan ?? null)} />
       )}
 
-      {planHasRealError ? (
-        <WorkoutErrorState onRetry={() => refetchPlan()} />
-      ) : planNotFound ? (
-        /* Section 5 — Empty state, no active plan */
-        <EmptyWorkoutState onGenerate={handleGenerate} isGenerating={generateWorkout.isPending} />
-      ) : (
-        <>
-          {/* Section 2 — Today's workout */}
-          {todayLoading ? (
-            <TodaysWorkoutCardSkeleton />
-          ) : todayHasRealError ? (
-            <WorkoutErrorState message="Couldn't load today's workout." onRetry={() => refetchToday()} />
-          ) : todayDay && !todayNotFound ? (
-            <TodaysWorkoutCard day={todayDay} estimatedDurationMinutes={estimatedDurationMinutes} />
-          ) : (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              Today is a rest day. Enjoy the recovery!
-            </div>
-          )}
-
-          {/* Section 3 — Weekly plan */}
-          {planLoading ? (
-            <WeeklyPlanSkeleton />
-          ) : plan ? (
-            <div>
-              <h2 className="mb-3 text-lg font-semibold">This week&apos;s plan</h2>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {plan.days.map((day, index) => {
-                  const maxExercises = Math.max(
-                    ...plan.days.map((d) => d.workout_exercises.length || 1),
-                    1,
-                  );
-                  const proportionalDuration = estimatedDurationMinutes
-                    ? Math.round(
-                        (estimatedDurationMinutes * (day.workout_exercises.length || 1)) /
-                          maxExercises,
-                      )
-                    : 45;
-                  return (
-                    <WeeklyPlanCard
-                      key={day.id}
-                      day={day}
-                      isToday={day.day_number === todaysDayNumber(plan.workout_days)}
-                      isSelected={day.id === selectedDayId}
-                      estimatedDurationMinutes={proportionalDuration}
-                      animationDelay={index * 60}
-                      onSelect={() => setSelectedDayId(day.id)}
-                    />
-                  );
-                })}
+      <AnimatePresence mode="wait">
+        {planHasRealError ? (
+          <motion.div key="error" exit={{ opacity: 0 }}>
+            <WorkoutErrorState onRetry={() => refetchPlan()} />
+          </motion.div>
+        ) : planNotFound ? (
+          <motion.div
+            key="empty"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            {/* Section 5 — Empty state, no active plan */}
+            <EmptyWorkoutState onGenerate={handleGenerate} isGenerating={generateWorkout.isPending} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-6"
+          >
+            {/* Section 2 — Today's workout */}
+            {todayLoading ? (
+              <TodaysWorkoutCardSkeleton />
+            ) : todayHasRealError ? (
+              <WorkoutErrorState
+                message="Couldn't load today's workout."
+                onRetry={() => refetchToday()}
+              />
+            ) : todayDay && !todayNotFound ? (
+              <TodaysWorkoutCard day={todayDay} estimatedDurationMinutes={estimatedDurationMinutes} />
+            ) : (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Today is a rest day. Enjoy the recovery!
               </div>
-            </div>
-          ) : null}
+            )}
 
-          {/* Section 4 — Workout details for the selected day. Keyed on the
-              selected day's id so switching days remounts this block and
-              its children, replaying their entrance animation as visible
-              feedback that the selection actually changed. */}
-          {!planLoading && plan && selectedDay && (
-            <div key={selectedDay.id} className="animate-fade-in-up">
-              <h2 className="mb-3 text-lg font-semibold">{selectedDay.day_name}</h2>
-              {selectedDay.workout_exercises.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No exercises scheduled for this day.</p>
-              ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {selectedDay.workout_exercises.map((we, index) => (
-                    <ExerciseCard key={we.id} workoutExercise={we} animationDelay={index * 50} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
+            {/* Section 3 — Weekly plan */}
+            {planLoading ? (
+              <WeeklyPlanSkeleton />
+            ) : plan ? (
+              <div>
+                <SectionHeader title="This week's plan" />
+                <motion.div
+                  variants={STAGGER_CONTAINER}
+                  initial="hidden"
+                  animate="visible"
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                >
+                  {plan.days.map((day) => {
+                    const maxExercises = Math.max(
+                      ...plan.days.map((d) => d.workout_exercises.length || 1),
+                      1,
+                    );
+                    const proportionalDuration = estimatedDurationMinutes
+                      ? Math.round(
+                          (estimatedDurationMinutes * (day.workout_exercises.length || 1)) /
+                            maxExercises,
+                        )
+                      : 45;
+                    return (
+                      <WeeklyPlanCard
+                        key={day.id}
+                        day={day}
+                        isToday={day.day_number === todaysDayNumber(plan.workout_days)}
+                        isSelected={day.id === selectedDayId}
+                        estimatedDurationMinutes={proportionalDuration}
+                        onSelect={() => setSelectedDayId(day.id)}
+                      />
+                    );
+                  })}
+                </motion.div>
+              </div>
+            ) : null}
+
+            {/* Section 4 — Workout details for the selected day. AnimatePresence
+                with a key on the day id smoothly cross-fades when switching
+                between days, instead of an abrupt content swap. */}
+            {!planLoading && plan && selectedDay && (
+              <div>
+                <SectionHeader title={selectedDay.day_name} />
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={selectedDay.id}
+                    variants={STAGGER_CONTAINER}
+                    initial="hidden"
+                    animate="visible"
+                    exit={{ opacity: 0 }}
+                  >
+                    {selectedDay.workout_exercises.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No exercises scheduled for this day.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {selectedDay.workout_exercises.map((we) => (
+                          <ExerciseCard key={we.id} workoutExercise={we} />
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

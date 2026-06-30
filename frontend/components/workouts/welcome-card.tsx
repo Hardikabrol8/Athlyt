@@ -1,20 +1,28 @@
+"use client";
+
+import { Flame, Target, Calendar, Beef } from "lucide-react";
+import { motion } from "framer-motion";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ProfileMetrics, ProfileResponse, WorkoutPlanResponse } from "@/types/user";
+import { DashboardStatCard } from "@/components/shared/dashboard-stat-card";
 import { FITNESS_GOAL_OPTIONS } from "@/lib/profile-options";
+import type { ProfileMetrics, ProfileResponse, WorkoutPlanResponse } from "@/types/user";
 
 function labelFor(options: readonly { value: string; label: string }[], value: string): string {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-function StatBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg p-2 transition-colors hover:bg-accent/50">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p key={value} className="animate-fade-in-up font-medium">
-        {value}
-      </p>
-    </div>
-  );
+/** A greeting that changes with the time of day — one of the "dashboard
+ * feel" cues called for in the design spec, computed client-side from the
+ * visitor's local clock rather than the server's (which could be in a
+ * different timezone). */
+function timeOfDayGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 5) return "Still up";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Good evening";
 }
 
 /**
@@ -22,11 +30,6 @@ function StatBlock({ label, value }: { label: string; value: string }) {
  * generated a workout yet still has a name/goal/calorie target to show, just
  * no split/workout-days values, which render as an em dash instead of being
  * left blank or crashing on a null access.
- *
- * Each stat's `key={value}` forces React to remount the text node whenever
- * the underlying value changes (e.g. right after generating a new plan), so
- * the fade-in replays — a small cue that the number actually updated rather
- * than the page silently re-rendering with new data.
  */
 export function WelcomeCard({
   profile,
@@ -40,15 +43,35 @@ export function WelcomeCard({
   return (
     <Card className="animate-fade-in-up overflow-hidden">
       <CardHeader>
-        <CardTitle className="text-2xl">
-          Welcome back, <span className="text-primary">{profile.name}</span>
-        </CardTitle>
+        <motion.div
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <p className="text-sm text-muted-foreground">{timeOfDayGreeting()},</p>
+          <CardTitle className="text-2xl">
+            <span className="text-gradient-brand">{profile.name}</span>
+          </CardTitle>
+        </motion.div>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatBlock label="Fitness goal" value={labelFor(FITNESS_GOAL_OPTIONS, profile.fitness_goal)} />
-        <StatBlock label="Current split" value={plan?.title ?? "—"} />
-        <StatBlock label="Workout days" value={plan ? `${plan.workout_days} / week` : "—"} />
-        <StatBlock label="Daily calorie target" value={`${metrics.daily_calories} kcal`} />
+      <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <DashboardStatCard
+          icon={Target}
+          label="Fitness goal"
+          value={labelFor(FITNESS_GOAL_OPTIONS, profile.fitness_goal)}
+        />
+        <DashboardStatCard icon={Flame} label="Current split" value={plan?.title ?? "—"} />
+        <DashboardStatCard
+          icon={Calendar}
+          label="Workout days"
+          value={plan ? `${plan.workout_days} / week` : "—"}
+        />
+        <DashboardStatCard
+          icon={Beef}
+          label="Daily calorie target"
+          numericValue={metrics.daily_calories}
+          suffix=" kcal"
+        />
       </CardContent>
     </Card>
   );

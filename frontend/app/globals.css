@@ -1,18 +1,16 @@
 @import "tailwindcss";
 
 /*
- * Theme tokens below are shadcn/ui's real default "neutral" base-color theme
- * (oklch values), trimmed down from their source: dropped are the chart/sidebar
- * tokens not used yet, and the docs-site-specific extras (code highlighting,
- * custom breakpoints, multi-theme switcher variants) that exist only in
- * shadcn's own documentation site, not in a standard project. They can be
- * added back the moment a feature actually needs them (e.g. chart tokens
- * when the progress-tracking charts are built).
+ * Design system tokens — Athlyt's palette: Indigo primary, Emerald accent,
+ * with dedicated success/warning/error semantic tokens (distinct from the
+ * single `destructive` shadcn ships with, since the spec calls for amber
+ * warnings as a distinct state from red errors). All values are oklch to
+ * match shadcn's own convention, hand-picked to land close to Tailwind's
+ * indigo-600/emerald-500/amber-500/red-500 reference points.
  *
- * `@custom-variant dark` is what makes `dark:` utility classes respond to a
- * `.dark` class on an ancestor element (toggled by next-themes) rather than
- * the OS-level `prefers-color-scheme` media query — required for the
- * dark-mode toggle in `components/providers/theme-provider.tsx` to work.
+ * `@custom-variant dark` makes `dark:` utilities respond to a `.dark` class
+ * on an ancestor (toggled by next-themes) rather than the OS-level
+ * `prefers-color-scheme` media query.
  */
 @custom-variant dark (&:is(.dark *));
 
@@ -37,6 +35,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -45,48 +47,81 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0% 0 0);
+  --radius: 0.75rem;
+
+  /* Off-white background, near-black foreground */
+  --background: oklch(0.99 0.002 247);
+  --foreground: oklch(0.18 0.014 257);
+
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0% 0 0);
+  --card-foreground: oklch(0.18 0.014 257);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0% 0 0);
-  --primary: oklch(0% 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.97 0.01 17);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.18 0.014 257);
+
+  /* Indigo primary */
+  --primary: oklch(0.51 0.21 264);
+  --primary-foreground: oklch(0.98 0.005 248);
+
+  --secondary: oklch(0.96 0.008 264);
+  --secondary-foreground: oklch(0.27 0.03 264);
+
+  --muted: oklch(0.96 0.006 264);
+  --muted-foreground: oklch(0.52 0.02 260);
+
+  /* Emerald accent */
+  --accent: oklch(0.93 0.05 162);
+  --accent-foreground: oklch(0.27 0.08 162);
+
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.98 0.01 17);
+
+  --success: oklch(0.6 0.16 152);
+  --success-foreground: oklch(0.98 0.02 152);
+
+  --warning: oklch(0.75 0.16 75);
+  --warning-foreground: oklch(0.22 0.04 75);
+
+  --border: oklch(0.91 0.008 264);
+  --input: oklch(0.91 0.008 264);
+  --ring: oklch(0.51 0.21 264 / 50%);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.58 0.22 27);
+  /* Near-black background */
+  --background: oklch(0.14 0.012 260);
+  --foreground: oklch(0.96 0.005 248);
+
+  --card: oklch(0.19 0.014 260);
+  --card-foreground: oklch(0.96 0.005 248);
+  --popover: oklch(0.19 0.014 260);
+  --popover-foreground: oklch(0.96 0.005 248);
+
+  /* Indigo primary, brightened for dark backgrounds */
+  --primary: oklch(0.71 0.16 264);
+  --primary-foreground: oklch(0.16 0.03 264);
+
+  --secondary: oklch(0.26 0.015 260);
+  --secondary-foreground: oklch(0.96 0.005 248);
+
+  --muted: oklch(0.24 0.014 260);
+  --muted-foreground: oklch(0.68 0.018 260);
+
+  /* Emerald accent, dimmed for dark backgrounds */
+  --accent: oklch(0.27 0.05 162);
+  --accent-foreground: oklch(0.86 0.1 162);
+
+  --destructive: oklch(0.7 0.19 22);
+  --destructive-foreground: oklch(0.16 0.03 22);
+
+  --success: oklch(0.72 0.15 152);
+  --success-foreground: oklch(0.16 0.03 152);
+
+  --warning: oklch(0.78 0.15 80);
+  --warning-foreground: oklch(0.18 0.03 80);
+
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.71 0.16 264 / 50%);
 }
 
 @layer base {
@@ -99,10 +134,12 @@
 }
 
 /*
- * Small, dependency-free animation utilities (Tailwind v4 has no built-in
- * `animate-in`/`fade-in` set the way v3 + tailwindcss-animate did). Defined
- * once here rather than pulling in a whole animation library for a handful
- * of entrance/hover effects on the dashboard.
+ * Small, dependency-free animation + visual utilities. Tailwind v4 has no
+ * built-in `animate-in`/`fade-in` set the way v3 + tailwindcss-animate did,
+ * and not every motion need (shimmer, glass cards, gradient text) is worth
+ * pulling Framer Motion in for — those stay CSS-only; Framer Motion (now a
+ * dependency) is used in components for layout transitions, exit animations,
+ * and orchestrated stagger that's awkward to express in pure CSS.
  */
 @layer utilities {
   @keyframes fade-in-up {
@@ -169,9 +206,30 @@
     animation: count-pulse 0.4s ease-out;
   }
 
-  /* Respect reduced-motion preference: every custom animation above collapses
-     to an instant, final-state render instead of forcing motion on users who
-     have asked the OS to avoid it. */
+  /* Gradient text for hero/heading emphasis — indigo → emerald, used
+     sparingly (landing page hero, dashboard greeting name) per the "use
+     gradients sparingly" guidance. */
+  .text-gradient-brand {
+    background-image: linear-gradient(
+      135deg,
+      var(--color-primary),
+      color-mix(in oklch, var(--color-primary), var(--color-accent-foreground) 55%)
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  /* Soft glass-morphism card: translucent surface + blur + hairline border.
+     Used for elevated/sticky surfaces (header, hero panels) rather than
+     every card — overusing it would flatten the visual hierarchy. */
+  .glass-card {
+    background-color: color-mix(in oklch, var(--color-card) 72%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid color-mix(in oklch, var(--color-border) 80%, transparent);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-fade-in-up,
     .animate-scale-in,
