@@ -15,7 +15,8 @@ from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from typing_extensions import Annotated
 
 
 class Settings(BaseSettings):
@@ -37,7 +38,9 @@ class Settings(BaseSettings):
 
     # --- API -----------------------------------------------------------------
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
 
     # --- Database --------------------------------------------------------------
     # SQLite for local dev; swap to a `postgresql://...` URL for production —

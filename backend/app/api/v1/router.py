@@ -4,7 +4,6 @@ adding one `include_router` call here — `main.py` itself never changes."""
 from fastapi import APIRouter
 
 from app.api.v1.routers import auth, exercises, health, users, workouts
-from app.api.v1.routers import auth, exercises, health, users
 
 api_router = APIRouter()
 api_router.include_router(health.router)
