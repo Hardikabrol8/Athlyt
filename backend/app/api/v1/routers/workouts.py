@@ -1,33 +1,153 @@
-"""`/workouts/recommend` — the workout recommendation engine.
+"""`/workouts` router — recommendation + plan generation + plan retrieval.
 
-Deliberately the only route here: this milestone is scoped to "which split
-fits this user," not workout-plan generation (a later milestone). Nothing in
-this router touches the database directly or persists a result — it reads
-the already-loaded `current_user.profile` and returns a computed response.
+Endpoints:
+  POST /workouts/recommend  — stateless split recommendation (Milestone 2.2)
+  POST /workouts/generate   — generate & persist a full weekly plan (Milestone 2.3)
+  GET  /workouts/current    — return the user's active plan (Milestone 2.3)
+  GET  /workouts/today      — return today's workout day (Milestone 2.3)
 """
 
-from fastapi import APIRouter
+from datetime import datetime
 
-from app.api.deps import CurrentUser
+from fastapi import APIRouter, HTTPException, status
+
+from app.api.deps import CurrentUser, DbSession
+from app.repositories import workout_plan_repository
 from app.schemas.recommendation import RecommendationResponse, WorkoutRecommendationRequest
+from app.schemas.workout import (
+    GeneratedWorkoutPlanResponse,
+    GenerateWorkoutRequest,
+    WorkoutDayResponse,
+    WorkoutPlanResponse,
+)
+from app.services.workout_planner_service import WorkoutPlannerService
 from app.services.workout_recommendation_service import WorkoutRecommendationService
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
-# A single shared instance: `WorkoutRecommendationService` holds no
-# request-specific or mutable state (the rule engine it wraps is stateless
-# too), so constructing one per request would be pure overhead for no
-# benefit — same reasoning as a router module having one `APIRouter`.
 _recommendation_service = WorkoutRecommendationService()
+_planner_service = WorkoutPlannerService()
+
+
+# ---------------------------------------------------------------------------
+# POST /workouts/recommend  (Milestone 2.2 — unchanged)
+# ---------------------------------------------------------------------------
 
 
 @router.post("/recommend", response_model=RecommendationResponse)
 def recommend_workout_split(
     data: WorkoutRecommendationRequest, current_user: CurrentUser
 ) -> RecommendationResponse:
-    """Recommend a workout split for the current user. Raises (via
-    `WorkoutRecommendationService`) a 422 if onboarding is incomplete —
-    handled by the same global exception handler as every other endpoint, so
-    no internal details leak into the error response.
-    """
+    """Recommend a workout split for the current user without persisting anything."""
     return _recommendation_service.recommend(current_user.profile, data.workout_days_per_week)
+
+
+# ---------------------------------------------------------------------------
+# POST /workouts/generate  (Milestone 2.3)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/generate",
+    response_model=GeneratedWorkoutPlanResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def generate_workout_plan(
+    data: GenerateWorkoutRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> GeneratedWorkoutPlanResponse:
+    """Full pipeline: recommend a split → build a weekly plan from DB exercises
+    → deactivate any existing active plan → persist → return the complete plan.
+
+    Raises 422 if onboarding is incomplete (no profile / missing fields).
+    """
+    # Step 1: recommend a split (reuses the same service as /recommend)
+    recommendation = _recommendation_service.recommend(
+        current_user.profile, data.workout_days_per_week
+    )
+
+    # Step 2: generate and persist the plan
+    profile = current_user.profile
+    # profile is guaranteed non-None here — recommend() raises 422 if it's None
+    assert profile is not None
+
+    return _planner_service.generate_and_save(
+        db=db,
+        user_id=current_user.id,
+        user_equipment=profile.equipment_available,
+        recommendation=recommendation,
+        fitness_goal=profile.fitness_goal,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /workouts/current  (Milestone 2.3)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/current", response_model=WorkoutPlanResponse)
+def get_current_plan(
+    current_user: CurrentUser,
+    db: DbSession,
+) -> WorkoutPlanResponse:
+    """Return the user's current active workout plan with all days and exercises.
+
+    Raises 404 if no active plan exists (i.e. the user hasn't generated one
+    yet, or all plans have been deactivated).
+    """
+    plan = workout_plan_repository.get_active_by_user(db, current_user.id)
+    if plan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active workout plan found. Generate one at POST /workouts/generate.",
+        )
+    return WorkoutPlanResponse.model_validate(plan)
+
+
+# ---------------------------------------------------------------------------
+# GET /workouts/today  (Milestone 2.3)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/today", response_model=WorkoutDayResponse)
+def get_todays_workout(
+    current_user: CurrentUser,
+    db: DbSession,
+) -> WorkoutDayResponse:
+    """Return the workout scheduled for today based on the day of the week.
+
+    Logic: day_number is 1-indexed starting Monday (ISO weekday). Today's
+    weekday (1=Mon … 7=Sun) is mapped to the plan's day list by position.
+    If today is a rest day (weekday > plan.workout_days), raises 404 with a
+    clear message rather than silently returning nothing.
+    """
+    plan = workout_plan_repository.get_active_by_user(db, current_user.id)
+    if plan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active workout plan found. Generate one at POST /workouts/generate.",
+        )
+
+    today_iso = datetime.now().isoweekday()  # 1 = Monday, 7 = Sunday
+    # Map to a 0-based index into the plan's training days
+    day_index = (today_iso - 1) % plan.workout_days
+
+    if not plan.days:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Your workout plan has no days. Please regenerate.",
+        )
+
+    # plan.days is ordered by day_number (see WorkoutPlan relationship)
+    sorted_days = sorted(plan.days, key=lambda d: d.day_number)
+
+    # If today's index is a rest day (beyond the scheduled training days)
+    if day_index >= len(sorted_days):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Today is a rest day. Enjoy the recovery!",
+        )
+
+    today_day = sorted_days[day_index]
+    return WorkoutDayResponse.model_validate(today_day)

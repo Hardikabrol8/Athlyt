@@ -4,7 +4,8 @@
 
 Athlyt is an AI-powered fitness coach: personalized workout plans, diet plans,
 and progress tracking, with a machine learning model recommending workouts.
-Built as a placement-portfolio project — full-stack + ML.
+Built as a placement-portfolio project — full-stack + ML, kept intentionally
+scoped to ship in a week rather than gold-plated.
 
 ## Tech stack
 
@@ -44,10 +45,19 @@ Built feature by feature, each one reviewed before the next starts. So far:
   `backend/app/services/recommendation_rules.py`) designed to be swappable
   for an ML model later without changing any other code. Stateless — nothing
   is persisted.
+- **Workout planner & plan persistence** — `POST /api/v1/workouts/generate`
+  turns a recommendation into a complete weekly plan: exercises are selected
+  dynamically from the Exercise table (never hardcoded), filtered by the
+  user's equipment and experience level, with sets/reps/rest auto-derived
+  from a volume table keyed on experience × goal (see
+  `backend/app/services/workout_planner_service.py`). Generating a new plan
+  deactivates the previous one rather than deleting it, so history is kept.
+  `GET /api/v1/workouts/current` returns the active plan; `GET
+  /api/v1/workouts/today` returns just today's day, mapped from the current
+  weekday.
 
-Not built yet: actual workout-plan generation (picking specific exercises
-for specific days), diet planning, progress tracking, the AI coach, and the
-ML model itself.
+Not built yet: diet planning, progress tracking, the AI coach, and the ML
+model itself.
 
 ## Running it locally
 
