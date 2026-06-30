@@ -1,10 +1,19 @@
-"""`/workouts` router — recommendation + plan generation + plan retrieval.
+"""`/workouts` router — recommendation + plan generation + plan retrieval +
+session tracking.
 
 Endpoints:
   POST /workouts/recommend  — stateless split recommendation (Milestone 2.2)
   POST /workouts/generate   — generate & persist a full weekly plan (Milestone 2.3)
   GET  /workouts/current    — return the user's active plan (Milestone 2.3)
   GET  /workouts/today      — return today's workout day (Milestone 2.3)
+  POST /workouts/start                                    (Milestone 2.5)
+  POST /workouts/{session_id}/pause                       (Milestone 2.5)
+  POST /workouts/{session_id}/resume                       (Milestone 2.5)
+  POST /workouts/{session_id}/exercise/{exercise_id}/complete  (Milestone 2.5)
+  POST /workouts/{session_id}/exercise/{exercise_id}/skip      (Milestone 2.5)
+  POST /workouts/{session_id}/finish                       (Milestone 2.5)
+  GET  /workouts/history                                   (Milestone 2.5)
+  GET  /workouts/history/{session_id}                      (Milestone 2.5)
 """
 
 from datetime import datetime
@@ -20,13 +29,21 @@ from app.schemas.workout import (
     WorkoutDayResponse,
     WorkoutPlanResponse,
 )
+from app.schemas.workout_session import (
+    ExerciseCompletionRequest,
+    ExerciseCompletionResponse,
+    FinishWorkoutResponse,
+    WorkoutSessionResponse,
+)
 from app.services.workout_planner_service import WorkoutPlannerService
 from app.services.workout_recommendation_service import WorkoutRecommendationService
+from app.services.workout_tracking_service import WorkoutTrackingService
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
 _recommendation_service = WorkoutRecommendationService()
 _planner_service = WorkoutPlannerService()
+_tracking_service = WorkoutTrackingService()
 
 
 # ---------------------------------------------------------------------------
@@ -151,3 +168,145 @@ def get_todays_workout(
 
     today_day = sorted_days[day_index]
     return WorkoutDayResponse.model_validate(today_day)
+
+
+# ---------------------------------------------------------------------------
+# POST /workouts/start  (Milestone 2.5)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/start",
+    response_model=WorkoutSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def start_workout(current_user: CurrentUser, db: DbSession) -> WorkoutSessionResponse:
+    """Start today's workout, creating a new `WorkoutSession`.
+
+    Raises 404 if there's no active plan, 422 if today is a rest day, and
+    409 if the user already has an active or paused session open.
+    """
+    session = _tracking_service.start_session(db, current_user.id)
+    return WorkoutSessionResponse.model_validate(session)
+
+
+# ---------------------------------------------------------------------------
+# POST /workouts/{session_id}/pause and /resume  (Milestone 2.5)
+# Not in the milestone's literal endpoint list, but required by its feature
+# list ("Pause and resume workouts") — see WorkoutTrackingService for the
+# full rationale.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{session_id}/pause", response_model=WorkoutSessionResponse)
+def pause_workout(
+    session_id: str, current_user: CurrentUser, db: DbSession
+) -> WorkoutSessionResponse:
+    session = _tracking_service.pause_session(db, current_user.id, session_id)
+    return WorkoutSessionResponse.model_validate(session)
+
+
+@router.post("/{session_id}/resume", response_model=WorkoutSessionResponse)
+def resume_workout(
+    session_id: str, current_user: CurrentUser, db: DbSession
+) -> WorkoutSessionResponse:
+    session = _tracking_service.resume_session(db, current_user.id, session_id)
+    return WorkoutSessionResponse.model_validate(session)
+
+
+# ---------------------------------------------------------------------------
+# POST /workouts/{session_id}/exercise/{exercise_id}/complete  (Milestone 2.5)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{session_id}/exercise/{exercise_id}/complete",
+    response_model=ExerciseCompletionResponse,
+)
+def complete_exercise(
+    session_id: str,
+    exercise_id: str,
+    data: ExerciseCompletionRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> ExerciseCompletionResponse:
+    """Mark a `WorkoutExercise` as completed within this session.
+
+    `exercise_id` here refers to the `WorkoutExercise` row (the specific
+    placement within the plan, with its prescribed sets/reps), not the
+    shared `Exercise` library row — consistent with every other workout
+    endpoint that deals in plan-specific exercise placements.
+    """
+    completion = _tracking_service.complete_exercise(
+        db, current_user.id, session_id, exercise_id, data
+    )
+    return ExerciseCompletionResponse.model_validate(completion)
+
+
+# ---------------------------------------------------------------------------
+# POST /workouts/{session_id}/exercise/{exercise_id}/skip  (Milestone 2.5)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{session_id}/exercise/{exercise_id}/skip",
+    response_model=ExerciseCompletionResponse,
+)
+def skip_exercise(
+    session_id: str,
+    exercise_id: str,
+    data: ExerciseCompletionRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> ExerciseCompletionResponse:
+    """Mark a `WorkoutExercise` as skipped within this session."""
+    completion = _tracking_service.skip_exercise(db, current_user.id, session_id, exercise_id, data)
+    return ExerciseCompletionResponse.model_validate(completion)
+
+
+# ---------------------------------------------------------------------------
+# POST /workouts/{session_id}/finish  (Milestone 2.5)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{session_id}/finish", response_model=FinishWorkoutResponse)
+def finish_workout(
+    session_id: str, current_user: CurrentUser, db: DbSession
+) -> FinishWorkoutResponse:
+    """Finish a workout session: computes total active duration (excluding
+    any paused time), estimates calories burned, and returns a summary.
+
+    Raises 409 if the session is already completed — a finished workout
+    cannot be re-finished or otherwise modified.
+    """
+    profile = current_user.profile
+    assert profile is not None  # every user with a session also onboarded
+    return _tracking_service.finish_session(db, current_user.id, session_id, profile)
+
+
+# ---------------------------------------------------------------------------
+# GET /workouts/history  (Milestone 2.5)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/history", response_model=list[WorkoutSessionResponse])
+def get_workout_history(current_user: CurrentUser, db: DbSession) -> list[WorkoutSessionResponse]:
+    """Every completed workout session for the user, most recent first.
+    Never empty-vs-404 — an empty list is a perfectly normal response for a
+    user who hasn't finished a workout yet."""
+    sessions = _tracking_service.get_history(db, current_user.id)
+    return [WorkoutSessionResponse.model_validate(s) for s in sessions]
+
+
+# ---------------------------------------------------------------------------
+# GET /workouts/history/{session_id}  (Milestone 2.5)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/history/{session_id}", response_model=WorkoutSessionResponse)
+def get_workout_session_detail(
+    session_id: str, current_user: CurrentUser, db: DbSession
+) -> WorkoutSessionResponse:
+    """Full detail for a single session — completed or still in progress."""
+    session = _tracking_service.get_session_detail(db, current_user.id, session_id)
+    return WorkoutSessionResponse.model_validate(session)
