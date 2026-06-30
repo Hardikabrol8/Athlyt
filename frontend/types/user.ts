@@ -168,6 +168,9 @@ export interface WorkoutSessionResponse {
   total_duration_minutes: number | null;
   calories_burned_estimate: number | null;
   exercise_completions: ExerciseCompletionResponse[];
+  // Internal bookkeeping fields returned by the API — used by the live timer
+  accumulated_active_seconds: number;
+  last_resumed_at: string;
 }
 
 export interface FinishWorkoutResponse {

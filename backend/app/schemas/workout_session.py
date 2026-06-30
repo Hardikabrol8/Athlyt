@@ -50,6 +50,10 @@ class WorkoutSessionResponse(BaseModel):
     total_duration_minutes: int | None
     calories_burned_estimate: float | None
     exercise_completions: list[ExerciseCompletionResponse] = []
+    # Exposed so the frontend live-timer can compute elapsed active seconds
+    # correctly across pause/resume cycles without a separate polling endpoint.
+    accumulated_active_seconds: int
+    last_resumed_at: datetime
 
 
 class FinishWorkoutResponse(BaseModel):

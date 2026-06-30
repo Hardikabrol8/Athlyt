@@ -1,26 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { Clock, Dumbbell, Target } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardStatCard } from "@/components/shared/dashboard-stat-card";
 import { PrimaryButton } from "@/components/shared/primary-button";
+import { ActiveWorkoutCard } from "@/components/workouts/active-workout-card";
+import { useStartWorkout, isConflictError } from "@/hooks/use-workout-session";
 import type { WorkoutDayResponse } from "@/types/user";
 
-/**
- * Section 2 — today's specific workout. `estimatedDurationMinutes` is passed
- * in separately because it lives on the plan-level response
- * (`GeneratedWorkoutPlanResponse`), not on the day itself — `/workouts/today`
- * returns a bare `WorkoutDayResponse` with no duration field.
- *
- * "Start Workout" has no behavior yet — workout *completion* tracking is
- * explicitly out of scope for this milestone — so it's disabled with a
- * title tooltip rather than silently doing nothing on click.
- *
- * A subtle gradient wash marks this as the dashboard's primary call-to-
- * action card, distinct from the plainer cards below it.
- */
 export function TodaysWorkoutCard({
   day,
   estimatedDurationMinutes,
@@ -28,6 +19,42 @@ export function TodaysWorkoutCard({
   day: WorkoutDayResponse;
   estimatedDurationMinutes: number | null;
 }) {
+  // null  = no session open yet
+  // string = session ID currently active
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const startWorkout = useStartWorkout();
+
+  // Once a session is finished, the ActiveWorkoutCard calls onSessionEnded —
+  // we clear the session ID so this card returns to its idle state.
+  function handleSessionEnded() {
+    setSessionId(null);
+  }
+
+  async function handleStart() {
+    try {
+      const session = await startWorkout.mutateAsync();
+      setSessionId(session.id);
+    } catch (err) {
+      if (isConflictError(err)) {
+        toast.error("You already have an active session. Refresh and try again.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to start workout.");
+      }
+    }
+  }
+
+  // ── Active session view ──────────────────────────────────────────────────
+  if (sessionId) {
+    return (
+      <ActiveWorkoutCard
+        sessionId={sessionId}
+        day={day}
+        onSessionEnded={handleSessionEnded}
+      />
+    );
+  }
+
+  // ── Idle view ────────────────────────────────────────────────────────────
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -57,12 +84,20 @@ export function TodaysWorkoutCard({
               numericValue={day.workout_exercises.length}
             />
           </div>
+
           <PrimaryButton
-            className="w-full"
-            disabled
-            title="Workout completion tracking is coming in a future milestone."
+            className="w-full animate-pulse-glow"
+            onClick={handleStart}
+            disabled={startWorkout.isPending}
           >
-            Start Workout
+            {startWorkout.isPending ? (
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Starting…
+              </span>
+            ) : (
+              "Start Workout"
+            )}
           </PrimaryButton>
         </CardContent>
       </Card>
