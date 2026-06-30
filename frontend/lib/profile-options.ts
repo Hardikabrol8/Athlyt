@@ -43,3 +43,35 @@ export const EQUIPMENT_OPTIONS = [
   { value: "pull_up_bar", label: "Pull-up bar" },
   { value: "full_gym", label: "Full gym access" },
 ] as const;
+
+// --- Exercise-specific options (Milestone 2.4) ------------------------------
+// Distinct from the profile's own EQUIPMENT_OPTIONS above — exercises use a
+// finer-grained equipment vocabulary (see backend `ExerciseEquipment` enum).
+
+export const MUSCLE_GROUP_LABELS: Record<string, string> = {
+  chest: "Chest",
+  back: "Back",
+  shoulders: "Shoulders",
+  legs: "Legs",
+  arms: "Arms",
+  core: "Core",
+  cardio: "Cardio",
+};
+
+export const EXERCISE_EQUIPMENT_LABELS: Record<string, string> = {
+  bodyweight: "Bodyweight",
+  dumbbells: "Dumbbells",
+  barbell: "Barbell",
+  kettlebell: "Kettlebell",
+  resistance_bands: "Resistance bands",
+  machine: "Machine",
+  cable: "Cable",
+  bench: "Bench",
+  pull_up_bar: "Pull-up bar",
+};
+
+export const EXERCISE_DIFFICULTY_LABELS: Record<string, string> = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
+};
