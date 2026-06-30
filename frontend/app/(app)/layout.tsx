@@ -54,23 +54,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b px-6 py-4">
+      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/80 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
         <span className="text-lg font-bold tracking-tight">Athlyt</span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {isLoading ? (
             <Skeleton className="h-5 w-24" />
           ) : (
-            <span className="text-sm text-muted-foreground">
+            <span className="hidden max-w-32 truncate text-sm text-muted-foreground sm:inline">
               {user?.profile?.name ?? user?.email}
             </span>
           )}
           <ThemeToggle />
-          <Button variant="outline" size="sm" onClick={handleLogout}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            className="transition-transform active:scale-95"
+          >
             Log out
           </Button>
         </div>
       </header>
-      <main className="p-6">{children}</main>
+      <main className="p-4 sm:p-6">{children}</main>
     </div>
   );
 }

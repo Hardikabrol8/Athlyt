@@ -62,3 +62,82 @@ export interface AuthResponse {
   access_token: string;
   token_type: string;
 }
+
+// --- Workouts (Milestone 2.3 backend / 2.4 frontend) -----------------------
+// Mirrors `backend/app/models/enums.py` (Exercise-specific enums) and
+// `backend/app/schemas/workout.py` / `recommendation.py`.
+
+export type MuscleGroup = "chest" | "back" | "shoulders" | "legs" | "arms" | "core" | "cardio";
+
+export type ExerciseEquipment =
+  | "bodyweight"
+  | "dumbbells"
+  | "barbell"
+  | "kettlebell"
+  | "resistance_bands"
+  | "machine"
+  | "cable"
+  | "bench"
+  | "pull_up_bar";
+
+export type ExerciseDifficulty = "beginner" | "intermediate" | "advanced";
+
+export type ExerciseType = "strength" | "cardio" | "mobility" | "balance";
+
+export interface ExerciseResponse {
+  id: string;
+  name: string;
+  muscle_group: MuscleGroup;
+  equipment: ExerciseEquipment;
+  difficulty: ExerciseDifficulty;
+  instructions: string;
+  exercise_type: ExerciseType;
+  default_sets: number;
+  default_reps: string;
+  rest_seconds: number;
+  calories_per_set: number | null;
+  is_compound: boolean;
+  created_at: string;
+}
+
+export interface WorkoutExerciseResponse {
+  id: string;
+  workout_day_id: string;
+  sets: number;
+  reps: string;
+  rest_seconds: number;
+  order_index: number;
+  exercise: ExerciseResponse;
+}
+
+export interface WorkoutDayResponse {
+  id: string;
+  workout_plan_id: string;
+  day_number: number;
+  day_name: string;
+  focus_area: string;
+  workout_exercises: WorkoutExerciseResponse[];
+}
+
+export interface WorkoutPlanResponse {
+  id: string;
+  user_id: string;
+  title: string;
+  goal: FitnessGoal;
+  experience: WorkoutExperience;
+  workout_days: number;
+  active: boolean;
+  created_at: string;
+  days: WorkoutDayResponse[];
+}
+
+// The /generate response adds computed fields on top of WorkoutPlanResponse.
+export interface GeneratedWorkoutPlanResponse extends WorkoutPlanResponse {
+  split_name: string;
+  difficulty: string;
+  estimated_duration_minutes: number;
+}
+
+export interface GenerateWorkoutRequest {
+  workout_days_per_week: number;
+}
