@@ -94,3 +94,42 @@ class WorkoutPlanResponse(BaseModel):
     active: bool
     created_at: datetime
     days: list[WorkoutDayResponse] = []
+
+
+# --- Generate endpoint -----------------------------------------------------------
+class GenerateWorkoutRequest(BaseModel):
+    """Request body for POST /workouts/generate.
+
+    `workout_days_per_week` is required here for the same reason it's a
+    request field on /workouts/recommend: the Profile model has no such
+    column (added after the fact would need a migration), so it's taken
+    directly from the caller instead of read from the DB.
+    """
+
+    workout_days_per_week: int = Field(
+        ge=1, le=7, description="How many days per week the user wants to train."
+    )
+
+
+class GeneratedWorkoutPlanResponse(BaseModel):
+    """Enriched response for POST /workouts/generate — adds computed fields
+    (split_name, difficulty, estimated_duration_minutes) on top of the
+    plain WorkoutPlanResponse so the frontend has everything it needs to
+    render the plan without a second request."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    title: str
+    goal: FitnessGoal
+    experience: WorkoutExperience
+    workout_days: int
+    active: bool
+    created_at: datetime
+    days: list[WorkoutDayResponse] = []
+    # Computed at generation time, not stored in the DB — returned here
+    # so the frontend can display them without deriving them client-side.
+    split_name: str
+    difficulty: str
+    estimated_duration_minutes: int
