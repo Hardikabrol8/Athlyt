@@ -11,3 +11,7 @@ venv/
 .env.local
 *.db
 .DS_Store
+
+# Docker
+.env.docker
+postgres_data/
