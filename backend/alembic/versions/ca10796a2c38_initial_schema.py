@@ -1,7 +1,7 @@
 """initial_schema
 
 Revision ID: ca10796a2c38
-Revises: 
+Revises:
 Create Date: 2026-07-01 11:57:57.003476
 
 """

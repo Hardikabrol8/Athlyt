@@ -22,9 +22,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# ruff and black are pinned to EXACT versions, not ranges, deliberately.
+# A wide range let local dev and CI resolve different versions of the same
+# tool at different times — exactly what happened in practice. Exact pins
+# mean "if it's green on your machine, it's green in CI" is actually true.
+# Bump both deliberately (and re-run `ruff check .` / `black .` locally)
+# rather than letting a version range silently drift.
 dev = [
-    "ruff>=0.7,<1.0",
-    "black>=24.10,<26.0",
+    "ruff==0.15.20",
+    "black==25.12.0",
     "pytest>=8.3,<9.0",
     "httpx>=0.27,<1.0",
 ]
