@@ -122,3 +122,10 @@ class Difficulty(str, Enum):
     beginner = "beginner"
     intermediate = "intermediate"
     advanced = "advanced"
+
+
+class MealType(str, Enum):
+    breakfast = "breakfast"
+    lunch = "lunch"
+    dinner = "dinner"
+    snack = "snack"
