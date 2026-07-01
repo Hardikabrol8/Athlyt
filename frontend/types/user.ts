@@ -186,3 +186,86 @@ export interface ExerciseCompletionRequest {
   completed_reps?: string;
   notes?: string;
 }
+
+// --- Workout Stats -----------------------------------------------------------
+
+export interface WorkoutStatsSummary {
+  total_sessions: number;
+  total_minutes: number;
+  total_calories_burned: number;
+  total_exercises_completed: number;
+  current_streak_days: number;
+  longest_streak_days: number;
+  sessions_last_7_days: number;
+  sessions_last_30_days: number;
+  avg_session_minutes: number;
+  avg_calories_per_session: number;
+}
+
+// --- Progress ----------------------------------------------------------------
+
+export interface ProgressLog {
+  id: string;
+  log_date: string;
+  weight_kg: number | null;
+  body_fat_pct: number | null;
+  sleep_hours: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface ProgressSummary {
+  current_weight_kg: number | null;
+  current_body_fat_pct: number | null;
+  last_sleep_hours: number | null;
+  weight_change_30d_kg: number | null;
+  total_logs: number;
+  weight_entries: number;
+}
+
+// --- Nutrition ----------------------------------------------------------------
+
+export interface NutritionMeal {
+  id: string;
+  meal_type: "breakfast" | "lunch" | "dinner" | "snack";
+  name: string;
+  description: string | null;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+}
+
+export interface NutritionPlan {
+  id: string;
+  diet_type: string;
+  active: boolean;
+  target_calories: number;
+  target_protein_g: number;
+  target_carbs_g: number;
+  target_fat_g: number;
+  target_water_ml: number;
+  meals: NutritionMeal[];
+  created_at: string;
+}
+
+export interface NutritionLogEntry {
+  id: string;
+  log_date: string;
+  calories_consumed: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  water_ml: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface NutritionWeeklySummary {
+  avg_calories: number;
+  avg_protein_g: number;
+  avg_carbs_g: number;
+  avg_fat_g: number;
+  days_logged: number;
+}

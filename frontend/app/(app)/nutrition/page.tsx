@@ -1,12 +1,7 @@
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// eslint-disable @typescript-eslint/no-explicit-any
-"use client";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 import { useState } from "react";
 import { motion, type Variants } from "framer-motion";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Apple, Droplets, Flame, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -20,7 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiFetch } from "@/lib/api-client";
+import {
+  useNutritionPlan,
+  useGenerateNutritionPlan,
+  useTodayNutritionLog,
+  useNutritionWeeklySummary,
+  useLogNutrition,
+} from "@/hooks/use-dashboard-data";
+import type { NutritionMeal } from "@/types/user";
 
 const MEAL_COLORS: Record<string, string> = {
   breakfast: "#6366f1",
@@ -29,37 +31,21 @@ const MEAL_COLORS: Record<string, string> = {
   snack: "#ec4899",
 };
 
-function useNutritionPlan() {
-  return useQuery({
-    queryKey: ["nutrition", "plan"],
-    queryFn: () => apiFetch<any>("/nutrition/plans/current").catch(() => null),
-    retry: false,
-  });
-}
-
-function useTodayLog() {
-  return useQuery({
-    queryKey: ["nutrition", "log", "today"],
-    queryFn: () => apiFetch<any>("/nutrition/logs/today").catch(() => null),
-    retry: false,
-  });
-}
-
-function useWeeklySummary() {
-  return useQuery({
-    queryKey: ["nutrition", "summary", "weekly"],
-    queryFn: () => apiFetch<any>("/nutrition/summary/weekly"),
-  });
-}
-
-const container: Variants = { hidden: {}, visible: { transition: { staggerChildren: 0.08 } } };
-const item: Variants = { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } } };
+const container: Variants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+const item: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+};
 
 export default function NutritionPage() {
-  const queryClient = useQueryClient();
   const { data: plan, isLoading: planLoading, refetch: refetchPlan } = useNutritionPlan();
-  const { data: todayLog } = useTodayLog();
-  const { data: weekly, isLoading: weeklyLoading } = useWeeklySummary();
+  const { data: todayLog } = useTodayNutritionLog();
+  const { data: weekly, isLoading: weeklyLoading } = useNutritionWeeklySummary();
+  const generateMutation = useGenerateNutritionPlan();
+  const logMutation = useLogNutrition();
 
   const [calories, setCalories] = useState("");
   const [protein, setProtein] = useState("");
@@ -67,38 +53,50 @@ export default function NutritionPage() {
   const [fat, setFat] = useState("");
   const [water, setWater] = useState("");
 
-  const generateMutation = useMutation({
-    mutationFn: () => apiFetch("/nutrition/plans/generate", { method: "POST" }),
-    onSuccess: () => { toast.success("Meal plan generated!"); refetchPlan(); },
-    onError: () => toast.error("Failed to generate plan."),
-  });
-
-  const logMutation = useMutation({
-    mutationFn: (body: any) => apiFetch("/nutrition/logs", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => {
-      toast.success("Nutrition logged!");
-      queryClient.invalidateQueries({ queryKey: ["nutrition"] });
-      setCalories(""); setProtein(""); setCarbs(""); setFat(""); setWater("");
-    },
-    onError: () => toast.error("Failed to log nutrition."),
-  });
-
-  function handleLog() {
-    if (!calories || !protein || !carbs || !fat) return toast.error("Fill in all macro fields.");
-    logMutation.mutate({
-      calories_consumed: parseInt(calories),
-      protein_g: parseFloat(protein),
-      carbs_g: parseFloat(carbs),
-      fat_g: parseFloat(fat),
-      water_ml: water ? parseInt(water) : 0,
+  function handleGenerate() {
+    generateMutation.mutate(undefined, {
+      onSuccess: () => {
+        toast.success("Meal plan generated!");
+        refetchPlan();
+      },
+      onError: () => toast.error("Failed to generate plan."),
     });
   }
 
-  const macroData = plan ? [
-    { name: "Protein", value: plan.target_protein_g, color: "#6366f1" },
-    { name: "Carbs", value: plan.target_carbs_g, color: "#22c55e" },
-    { name: "Fat", value: plan.target_fat_g, color: "#f59e0b" },
-  ] : [];
+  function handleLog() {
+    if (!calories || !protein || !carbs || !fat) {
+      toast.error("Fill in all macro fields.");
+      return;
+    }
+    logMutation.mutate(
+      {
+        calories_consumed: parseInt(calories),
+        protein_g: parseFloat(protein),
+        carbs_g: parseFloat(carbs),
+        fat_g: parseFloat(fat),
+        water_ml: water ? parseInt(water) : 0,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Nutrition logged!");
+          setCalories("");
+          setProtein("");
+          setCarbs("");
+          setFat("");
+          setWater("");
+        },
+        onError: () => toast.error("Failed to log nutrition."),
+      },
+    );
+  }
+
+  const macroData: Array<{ name: string; value: number; color: string }> = plan
+    ? [
+        { name: "Protein", value: plan.target_protein_g, color: "#6366f1" },
+        { name: "Carbs", value: plan.target_carbs_g, color: "#22c55e" },
+        { name: "Fat", value: plan.target_fat_g, color: "#f59e0b" },
+      ]
+    : [];
 
   return (
     <motion.div variants={container} initial="hidden" animate="visible" className="space-y-8">
@@ -107,23 +105,51 @@ export default function NutritionPage() {
           title="Nutrition"
           description="Meal plan and daily macro tracking"
           action={
-            <PrimaryButton onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} className="shrink-0">
+            <PrimaryButton
+              onClick={handleGenerate}
+              disabled={generateMutation.isPending}
+              className="shrink-0"
+            >
               {plan ? "Regenerate" : "Generate"} plan
             </PrimaryButton>
           }
         />
       </motion.div>
 
-      {/* Weekly summary stats */}
+      {/* Weekly summary */}
       <motion.div variants={item} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {weeklyLoading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
         ) : (
           <>
-            <TiltCard><DashboardStatCard icon={Flame} label="Avg calories" value={weekly?.avg_calories ? `${weekly.avg_calories} kcal` : "—"} /></TiltCard>
-            <TiltCard><DashboardStatCard icon={Zap} label="Avg protein" value={weekly?.avg_protein_g ? `${weekly.avg_protein_g}g` : "—"} /></TiltCard>
-            <TiltCard><DashboardStatCard icon={Apple} label="Avg carbs" value={weekly?.avg_carbs_g ? `${weekly.avg_carbs_g}g` : "—"} /></TiltCard>
-            <TiltCard><DashboardStatCard icon={Droplets} label="Days logged" numericValue={weekly?.days_logged} /></TiltCard>
+            <TiltCard>
+              <DashboardStatCard
+                icon={Flame}
+                label="Avg calories"
+                value={weekly?.avg_calories ? `${weekly.avg_calories} kcal` : "—"}
+              />
+            </TiltCard>
+            <TiltCard>
+              <DashboardStatCard
+                icon={Zap}
+                label="Avg protein"
+                value={weekly?.avg_protein_g ? `${weekly.avg_protein_g}g` : "—"}
+              />
+            </TiltCard>
+            <TiltCard>
+              <DashboardStatCard
+                icon={Apple}
+                label="Avg carbs"
+                value={weekly?.avg_carbs_g ? `${weekly.avg_carbs_g}g` : "—"}
+              />
+            </TiltCard>
+            <TiltCard>
+              <DashboardStatCard
+                icon={Droplets}
+                label="Days logged"
+                numericValue={weekly?.days_logged}
+              />
+            </TiltCard>
           </>
         )}
       </motion.div>
@@ -132,16 +158,22 @@ export default function NutritionPage() {
       <motion.div variants={item}>
         <SectionHeader title="Your meal plan" />
         {planLoading ? (
-          <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-36 rounded-xl" />
+            ))}
+          </div>
         ) : !plan ? (
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
               <Apple className="h-10 w-10 text-muted-foreground/40" />
               <div>
                 <p className="font-medium">No meal plan yet</p>
-                <p className="text-sm text-muted-foreground">Generate a personalised plan based on your goals</p>
+                <p className="text-sm text-muted-foreground">
+                  Generate a personalised plan based on your goals
+                </p>
               </div>
-              <PrimaryButton onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
+              <PrimaryButton onClick={handleGenerate} disabled={generateMutation.isPending}>
                 Generate meal plan
               </PrimaryButton>
             </CardContent>
@@ -150,51 +182,91 @@ export default function NutritionPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             {/* Macro donut */}
             <TiltCard intensity={4}>
-              <Card className="lg:row-span-2">
-                <CardHeader><CardTitle className="text-base">Daily targets</CardTitle></CardHeader>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Daily targets</CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-center">
                     <ResponsiveContainer width={160} height={160}>
                       <PieChart>
-                        <Pie data={macroData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" strokeWidth={0}>
-                          {macroData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                        <Pie
+                          data={macroData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={70}
+                          dataKey="value"
+                          strokeWidth={0}
+                        >
+                          {macroData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
                         </Pie>
-                        <Tooltip formatter={(v: any) => `${v}g`} contentStyle={{ background: "var(--background)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--background)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                    labelFormatter={(label) => `${label}g`}
+                  />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Calories</span><span className="font-semibold">{plan.target_calories} kcal</span></div>
-                    {macroData.map(m => (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Calories</span>
+                      <span className="font-semibold">{plan.target_calories} kcal</span>
+                    </div>
+                    {macroData.map((m) => (
                       <div key={m.name} className="flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="h-2 w-2 rounded-full" style={{ background: m.color }} />
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: m.color }}
+                            aria-hidden
+                          />
                           {m.name}
                         </span>
                         <span className="font-semibold">{m.value}g</span>
                       </div>
                     ))}
-                    <div className="flex justify-between"><span className="text-muted-foreground">Water</span><span className="font-semibold">{plan.target_water_ml} ml</span></div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Water</span>
+                      <span className="font-semibold">{plan.target_water_ml} ml</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </TiltCard>
 
-            {/* Meals */}
-            {plan.meals?.map((meal: any) => (
+            {/* Meal cards */}
+            {plan.meals?.map((meal: NutritionMeal) => (
               <TiltCard key={meal.id} intensity={4}>
                 <Card>
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm capitalize">{meal.meal_type}</CardTitle>
-                      <Badge style={{ background: MEAL_COLORS[meal.meal_type] + "20", color: MEAL_COLORS[meal.meal_type], border: `1px solid ${MEAL_COLORS[meal.meal_type]}40` }}>
+                      <Badge
+                        style={{
+                          background: `${MEAL_COLORS[meal.meal_type]}20`,
+                          color: MEAL_COLORS[meal.meal_type],
+                          border: `1px solid ${MEAL_COLORS[meal.meal_type]}40`,
+                        }}
+                      >
                         {meal.calories} kcal
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-1">
-                    <p className="font-medium text-sm">{meal.name}</p>
-                    {meal.description && <p className="text-xs text-muted-foreground line-clamp-2">{meal.description}</p>}
+                    <p className="text-sm font-medium">{meal.name}</p>
+                    {meal.description && (
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {meal.description}
+                      </p>
+                    )}
                     <div className="flex gap-3 pt-1 text-xs text-muted-foreground">
                       <span>P: {meal.protein_g}g</span>
                       <span>C: {meal.carbs_g}g</span>
@@ -212,25 +284,42 @@ export default function NutritionPage() {
       <motion.div variants={item}>
         <SectionHeader
           title="Log today's intake"
-          description={todayLog ? `Today: ${todayLog.calories_consumed} kcal logged` : "Nothing logged today yet"}
+          description={
+            todayLog
+              ? `Today: ${todayLog.calories_consumed} kcal logged`
+              : "Nothing logged today yet"
+          }
         />
         <Card>
           <CardContent className="space-y-4 pt-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               {[
-                { label: "Calories (kcal)", value: calories, set: setCalories, placeholder: "e.g. 1800" },
-                { label: "Protein (g)", value: protein, set: setProtein, placeholder: "e.g. 140" },
-                { label: "Carbs (g)", value: carbs, set: setCarbs, placeholder: "e.g. 180" },
-                { label: "Fat (g)", value: fat, set: setFat, placeholder: "e.g. 60" },
-                { label: "Water (ml)", value: water, set: setWater, placeholder: "e.g. 2500" },
-              ].map(f => (
-                <div key={f.label} className="space-y-1.5">
-                  <Label className="text-xs">{f.label}</Label>
-                  <Input type="number" placeholder={f.placeholder} value={f.value} onChange={e => f.set(e.target.value)} />
+                { id: "cal", label: "Calories (kcal)", value: calories, set: setCalories, placeholder: "1800" },
+                { id: "prot", label: "Protein (g)", value: protein, set: setProtein, placeholder: "140" },
+                { id: "carb", label: "Carbs (g)", value: carbs, set: setCarbs, placeholder: "180" },
+                { id: "fat-g", label: "Fat (g)", value: fat, set: setFat, placeholder: "60" },
+                { id: "water", label: "Water (ml)", value: water, set: setWater, placeholder: "2500" },
+              ].map((f) => (
+                <div key={f.id} className="space-y-1.5">
+                  <Label htmlFor={f.id} className="text-xs">
+                    {f.label}
+                  </Label>
+                  <Input
+                    id={f.id}
+                    type="number"
+                    placeholder={f.placeholder}
+                    value={f.value}
+                    onChange={(e) => f.set(e.target.value)}
+                    min="0"
+                  />
                 </div>
               ))}
             </div>
-            <PrimaryButton onClick={handleLog} disabled={logMutation.isPending} className="w-full sm:w-auto">
+            <PrimaryButton
+              onClick={handleLog}
+              disabled={logMutation.isPending}
+              className="w-full sm:w-auto"
+            >
               {logMutation.isPending ? "Saving…" : "Log nutrition"}
             </PrimaryButton>
           </CardContent>
