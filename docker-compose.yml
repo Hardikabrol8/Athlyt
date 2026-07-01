@@ -51,7 +51,7 @@ services:
       # Database — uses the postgres service name as the hostname
       DATABASE_URL: postgresql+psycopg2://athlyt:${POSTGRES_PASSWORD:-athlyt_dev_password}@postgres:5432/athlyt
       # Auth
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required. Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in your .env file}
       # CORS — allow the frontend origin
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       # ML model path (mounted below)
@@ -98,3 +98,4 @@ services:
 volumes:
   postgres_data:
     driver: local
+
