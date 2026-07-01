@@ -54,6 +54,10 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in your .env file}
       # CORS — allow the frontend origin
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Allowed Host header values — "*" is fine inside Docker's internal
+      # network where the frontend calls the backend by service name, but
+      # set to your real domain if this container is ever exposed directly.
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
       # ML model path (mounted below)
       ML_MODEL_PATH: /app/ml/models/workout_recommender.joblib
     volumes:
@@ -98,4 +102,3 @@ services:
 volumes:
   postgres_data:
     driver: local
-
