@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy only the dependency manifest first — Docker layer-caches this step
 # until pyproject.toml changes, so a code-only change doesn't re-install deps.
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 # Minimal stub so hatchling can build the editable install
 RUN mkdir -p app && touch app/__init__.py
 
@@ -53,3 +53,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # If the migration fails the container exits before uvicorn starts,
 # making the issue immediately visible in logs.
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"]
+
