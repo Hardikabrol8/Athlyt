@@ -1,19 +1,24 @@
 """Database engine and session management.
 
-Design decision: synchronous SQLAlchemy, not async. FastAPI runs sync
-dependency functions (like `get_db` below) in a threadpool automatically, so
-request handling still doesn't block the event loop — we get that benefit
-without writing a single `async`/`await` in the data layer. This matters in
-practice: it means simpler session handling, no async-flavored Alembic setup
-needed later, and one less thing that can go subtly wrong under time pressure.
-If the project ever needs the extra concurrency headroom async buys, the
-swap is mechanical (the ORM models and query code don't change), but nothing
-at this project's scale needs it today.
+Supports both SQLite (local dev / tests) and PostgreSQL (production) from
+the same codebase — the DATABASE_URL environment variable selects the backend.
 
-`check_same_thread=False` is SQLite-specific — it's required because FastAPI's
-threadpool means a request can be served on a different thread than the one
-that created the connection. It's a no-op on Postgres and can be left in place
-or removed when migrating; either is fine.
+SQLite-specific behaviour:
+  - `check_same_thread=False` is required because FastAPI's threadpool can
+    serve a request on a different OS thread than the one that opened the
+    connection. This arg is silently ignored by all non-SQLite drivers.
+  - StaticPool forces in-memory SQLite to share one connection across all
+    threads, so tables created at startup are visible to request handlers.
+    Only activated for `sqlite:///:memory:` URLs (i.e. tests).
+
+PostgreSQL-specific behaviour:
+  - Pool size and overflow are tuned for a typical small production deployment.
+    Adjust `SQLALCHEMY_POOL_SIZE` / `SQLALCHEMY_MAX_OVERFLOW` env vars if
+    running under high concurrency or with a PgBouncer in front.
+  - `pool_pre_ping=True` silently drops and re-establishes stale connections,
+    which prevents "server closed the connection unexpectedly" errors after
+    the database has been idle for a while (common on Render/Railway free tiers
+    that idle the database after 5 minutes).
 """
 
 from collections.abc import Generator
@@ -30,12 +35,20 @@ _is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 _is_in_memory = _is_sqlite and ":memory:" in settings.DATABASE_URL
 
 _connect_args = {"check_same_thread": False} if _is_sqlite else {}
-# In-memory SQLite creates a fresh, separate database per connection unless
-# every "connection" is forced to share the same one via StaticPool — without
-# this, tables created at startup would disappear the moment a different
-# request opened a new connection. Irrelevant for the file-based dev database
-# or for Postgres, where this branch never triggers.
-_pool_kwargs = {"poolclass": StaticPool} if _is_in_memory else {}
+_pool_kwargs: dict = {"poolclass": StaticPool} if _is_in_memory else {}
+
+# PostgreSQL connection pool tuning — only applied for non-SQLite URLs.
+# pool_pre_ping reconnects after idle periods, preventing stale connection
+# errors common on free-tier databases (Render, Railway, Supabase, etc.).
+if not _is_sqlite:
+    _pool_kwargs.update(
+        {
+            "pool_size": 5,
+            "max_overflow": 10,
+            "pool_pre_ping": True,
+            "pool_recycle": 300,  # recycle connections every 5 min
+        }
+    )
 
 engine = create_engine(
     settings.DATABASE_URL,
@@ -48,9 +61,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency that yields a database session scoped to one request,
-    always closed at the end of the request — success or failure — via the
-    `try`/`finally`."""
+    """FastAPI dependency — yields a DB session scoped to one request."""
     db = SessionLocal()
     try:
         yield db
@@ -64,5 +75,5 @@ def check_database_connection() -> bool:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         return True
-    except Exception:  # noqa: BLE001 — any failure here means "unhealthy", full stop
+    except Exception:  # noqa: BLE001
         return False
