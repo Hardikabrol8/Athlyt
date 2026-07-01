@@ -118,13 +118,13 @@ These were consciously not built, not forgotten:
 
 | Feature | Reason |
 |---|---|
-| Alembic migrations | No production database yet; `create_all()` is sufficient until first deploy |
 | Refresh token rotation | Single 7-day token is the right tradeoff for a portfolio project |
 | Async SQLAlchemy | No performance benefit at this scale; adds setup complexity |
 | mypy | ruff catches real bugs; mypy config overhead not worth it for solo project |
-| Docker | Kept for after deployment milestone |
-| PostgreSQL in dev | SQLite is identical for this codebase; simpler local setup |
+| PostgreSQL in dev | SQLite is identical for this codebase; simpler local setup — production uses Postgres via `DATABASE_URL` |
 | Email verification | Real infrastructure (SMTP, token storage, resend logic); deferred |
 | Progress photos | Requires object storage (S3/R2) and multipart upload; deferred |
 | AI coach | Needs LLM API key and conversation management; deferred |
 | Real ML inference | Model trained in Colab; inference endpoint wired but no artifact yet |
+
+**Now implemented (previously listed here as deferred):** Alembic migrations, Docker (backend/frontend/compose stack), CI/CD (GitHub Actions), production deployment (Vercel + Render + Neon). See `CHANGELOG.md` for when each landed.
