@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000"]
     )
+    # Hostnames this API will accept requests for, checked against the `Host`
+    # header — mitigates Host header injection attacks (cache poisoning,
+    # password-reset link poisoning). "*" (any host) is fine in local dev;
+    # production should list only the actual API domain(s), e.g.
+    # "athlyt-api.onrender.com". Comma-separated, same NoDecode handling as
+    # CORS_ORIGINS above.
+    ALLOWED_HOSTS: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["*"])
 
     # --- Database --------------------------------------------------------------
     # SQLite for local dev; swap to a `postgresql://...` URL for production —
@@ -64,11 +71,11 @@ class Settings(BaseSettings):
     # training notebook's output and the backend's input.
     ML_MODEL_PATH: str = "../ml/models/workout_recommender.joblib"
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", mode="before")
     @classmethod
-    def _split_cors_origins(cls, value: str | list[str]) -> list[str]:
+    def _split_comma_separated(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
 

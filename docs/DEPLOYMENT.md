@@ -83,6 +83,7 @@ export DATABASE_URL=postgresql+psycopg2://user:pass@host:5432/dbname
 | `JWT_SECRET_KEY` | Min 32-char random string | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+psycopg2://user:pass@host:5432/athlyt` |
 | `CORS_ORIGINS` | Comma-separated allowed origins | `https://athlyt.vercel.app` |
+| `ALLOWED_HOSTS` | Comma-separated hostnames this API accepts (Host header check) | `athlyt-api.onrender.com` |
 | `ENVIRONMENT` | Must be `production` | `production` |
 | `DEBUG` | `false` in production | `false` |
 
@@ -154,6 +155,30 @@ Alternatively, split into a pre-deploy command and a start command on platforms 
 
 ---
 
+## PostgreSQL — Neon (recommended managed provider)
+
+[Neon](https://neon.tech) is a serverless PostgreSQL provider with a generous free tier — a good fit for a portfolio deployment.
+
+### Setup
+
+1. Create a project at [neon.tech](https://neon.tech) → note the connection string it gives you
+2. **Neon requires SSL** — it rejects unencrypted connections outright. Append `?sslmode=require` to the connection string:
+   ```
+   DATABASE_URL=postgresql+psycopg2://user:password@ep-xxx.us-east-2.aws.neon.tech/athlyt?sslmode=require
+   ```
+3. Set this as `DATABASE_URL` in your backend hosting platform's environment variables (Render/Railway/Fly.io) — **not** in Neon itself
+4. Run migrations against it before first deploy:
+   ```bash
+   export DATABASE_URL="postgresql+psycopg2://user:password@ep-xxx.../athlyt?sslmode=require"
+   alembic upgrade head
+   ```
+
+### Neon-specific notes
+
+- **Autosuspend**: Neon's free tier suspends the database after a period of inactivity and wakes it on the next connection — the first request after a suspend takes longer (cold start). `pool_pre_ping=True` (already set in `app/db/session.py`) handles the resulting stale-connection errors gracefully by testing and replacing the connection automatically.
+- **Connection limits**: Neon's free tier caps concurrent connections. The `pool_size=5, max_overflow=10` setting in `session.py` (15 max total) fits comfortably within Neon's free-tier limit — increase only if you upgrade Neon's plan.
+- **Branching**: Neon supports database branching (a `git branch`-like copy of your data) — useful for testing a migration against production-shaped data without touching the real database. Not required for this project's scope, but worth knowing about.
+
 ## PostgreSQL — Local development
 
 If you want to develop against PostgreSQL locally instead of SQLite:
@@ -178,16 +203,55 @@ uvicorn app.main:app --reload
 
 ---
 
+## Logging
+
+Configured in `app/core/logging_config.py`, wired in at the start of `create_app()` in `main.py` — before anything else in the app logs a single line.
+
+- **Local/test**: `DEBUG` level — verbose.
+- **Production**: `INFO` level — request outcomes and errors, not every SQL query.
+- **Output**: plain stdout/stderr, timestamped, with logger name and level. Every hosting platform in this guide (Render, Railway, Fly.io, Docker) captures stdout automatically — no log-shipping agent needed.
+- **What gets logged**: every domain exception (`AppException` subclasses — 404s, 409s, validation errors) at INFO with the exception type, message, HTTP method, and path. Every *unexpected* exception (a real bug) at ERROR with the full traceback via `logger.exception(...)`.
+- **What never gets logged**: passwords, JWTs, request bodies. Only exception messages and metadata.
+
+To view logs in production:
+```bash
+# Render
+# → Dashboard → your service → Logs tab (live tail available)
+
+# Railway
+railway logs
+
+# Fly.io
+fly logs
+
+# Docker Compose
+docker compose logs -f backend
+```
+
+## Security headers
+
+Two layers, matching origins:
+
+- **Frontend** (`frontend/next.config.ts`) — `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy` on every response.
+- **Backend** (`backend/app/core/security_headers.py`) — `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on every API response, since the API is sometimes hit directly (Swagger UI, curl, future mobile clients) rather than only through the Next.js frontend.
+
+Neither sets `Strict-Transport-Security` (HSTS) — Render, Railway, Fly.io, and Vercel all terminate TLS in front of the app and typically add HSTS themselves; setting it at the app level too risks a conflicting or overly aggressive `max-age` value.
+
+`TrustedHostMiddleware` (backend, via `ALLOWED_HOSTS`) rejects any request whose `Host` header doesn't match your actual API domain — mitigates Host header injection attacks (cache poisoning, password-reset link poisoning). Set to `*` in local dev, the real domain in production.
+
 ## Pre-deployment checklist
 
 - [ ] `JWT_SECRET_KEY` is a cryptographically random string ≥ 32 chars (never committed)
 - [ ] `CORS_ORIGINS` contains only your Vercel domain, not `localhost`
+- [ ] `ALLOWED_HOSTS` is set to your actual API domain, not `*`
 - [ ] `ENVIRONMENT=production` and `DEBUG=false`
-- [ ] `DATABASE_URL` points to managed PostgreSQL (not SQLite)
+- [ ] `DATABASE_URL` points to managed PostgreSQL (not SQLite), with `?sslmode=require` if using Neon
 - [ ] `NEXT_PUBLIC_API_URL` points to the deployed backend
 - [ ] `alembic upgrade head` runs successfully against the production database before server start
 - [ ] Health check passes at `/api/v1/health`
 - [ ] Full auth flow tested on production (register → onboard → generate plan)
+- [ ] Production logs are visible in the hosting platform's log viewer
+- [ ] Swagger UI (`/docs`) loads and shows all endpoints
 
 ---
 

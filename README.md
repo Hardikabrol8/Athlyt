@@ -202,8 +202,9 @@ npm run dev
 | Variable | Required | Description |
 |---|---|---|
 | `JWT_SECRET_KEY` | ✅ | Random string ≥ 32 chars. Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `DATABASE_URL` | ✅ | `sqlite:///./athlyt.db` (dev) or `postgresql+psycopg2://...` (prod) |
+| `DATABASE_URL` | ✅ | `sqlite:///./athlyt.db` (dev) or `postgresql+psycopg2://...` (prod, add `?sslmode=require` for Neon) |
 | `CORS_ORIGINS` | ✅ | Comma-separated: `http://localhost:3000` (dev) or `https://your-app.vercel.app` (prod) |
+| `ALLOWED_HOSTS` | — | Comma-separated hostnames (Host header check). `*` (dev) or your API domain (prod) |
 | `ENVIRONMENT` | — | `local` \| `production` (default: `local`) |
 | `DEBUG` | — | `true` \| `false` (default: `false`) |
 
@@ -343,11 +344,13 @@ Key design: SQLite in dev, PostgreSQL-compatible by design (UUIDs as `String(36)
 A few non-obvious choices worth knowing:
 
 - **Synchronous SQLAlchemy** — FastAPI runs sync deps in a threadpool; no async overhead needed at this scale.
-- **No Alembic (yet)** — `create_all()` at startup is correct for a project with no live database. Alembic gets added before the first real deployment.
+- **Alembic in production, `create_all()` in local/test** — production schema is managed exclusively by Alembic migrations (`alembic upgrade head` runs pre-deploy); local dev and tests still use `create_all()` for convenience, since neither has a schema history that matters. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - **Single JWT** — 7-day access token, no refresh rotation. Right tradeoff for a portfolio demo.
-- **`CORS_ORIGINS` with `NoDecode`** — pydantic-settings v2 would JSON-decode a list env var before the validator runs; `NoDecode` prevents this.
+- **`CORS_ORIGINS` and `ALLOWED_HOSTS` with `NoDecode`** — pydantic-settings v2 would JSON-decode a list env var before the validator runs; `NoDecode` prevents this.
 - **Pause/resume uses `accumulated_active_seconds`** — naive `completed_at - started_at` would count paused time as training time.
 - **Cursor glow on `requestAnimationFrame`** — style mutations bypass React's render cycle entirely; stays at 60fps on heavy pages.
+- **`app.*` loggers have no handlers of their own** — they propagate to root, which has the one handler. Giving `app` its own handler too would either double-log every line or require `propagate=False`, which would silently break log capture in tests (`caplog` listens at root). See `backend/app/core/logging_config.py`.
+- **Custom `Exception` handler explicitly calls `logger.exception(...)`** — registering any handler for the bare `Exception` class replaces Starlette's default `ServerErrorMiddleware`, which is what normally logs unhandled tracebacks. Without the explicit call, production 500s would be completely silent in the logs.
 
 Full decision log: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/PROJECT_BIBLE.md](docs/PROJECT_BIBLE.md).
 
