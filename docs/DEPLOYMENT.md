@@ -3,48 +3,124 @@
 ## Architecture
 
 ```
-Vercel (frontend)  ←→  Render / Railway (backend API)  ←→  PostgreSQL (managed)
+Vercel (frontend)  ←→  Render / Railway / Fly.io (backend API)  ←→  PostgreSQL (managed)
 ```
 
-Both tiers are stateless. The only stateful component is the database.
+---
+
+## Alembic — Database Migration Workflow
+
+Alembic is now the single source of truth for the database schema in production.
+
+### Day-to-day commands
+
+```bash
+# Apply all pending migrations to the database
+alembic upgrade head
+
+# Show current migration version on the connected database
+alembic current
+
+# Show migration history
+alembic history --verbose
+
+# Generate a new migration after changing a model
+alembic revision --autogenerate -m "describe_what_changed"
+
+# Roll back one migration
+alembic downgrade -1
+
+# Roll back to the very beginning (drops all tables)
+alembic downgrade base
+
+# Generate a SQL script instead of running live (for review)
+alembic upgrade head --sql
+```
+
+### Environment
+
+Alembic reads `DATABASE_URL` from your environment — the same variable the app uses. Set it before running any Alembic command:
+
+```bash
+# Local SQLite (default)
+export DATABASE_URL=sqlite:///./athlyt.db
+
+# Local PostgreSQL
+export DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/athlyt
+
+# Production (use the value from your deployment platform)
+export DATABASE_URL=postgresql+psycopg2://user:pass@host:5432/dbname
+```
+
+### Schema management strategy
+
+| Environment | Schema managed by |
+|---|---|
+| `ENVIRONMENT=local` (SQLite dev) | `create_all()` at startup — no migrations needed |
+| `ENVIRONMENT=test` (pytest) | `create_all()` via conftest.py — tests never use Alembic |
+| `ENVIRONMENT=production` (PostgreSQL) | **Alembic only** — `alembic upgrade head` before deploy |
+
+**Never run `alembic upgrade head` against your test database or an in-memory SQLite.** Tests use `create_all()` directly against a fresh in-memory SQLite for each test run — fast, isolated, Alembic-free.
+
+### Adding a new model (workflow)
+
+1. Create the model in `app/models/<name>.py`
+2. Register it in `app/models/__init__.py`
+3. Generate a migration: `alembic revision --autogenerate -m "add_<name>_table"`
+4. Review the generated file in `alembic/versions/`
+5. Apply locally: `alembic upgrade head`
+6. Commit both the model file and the migration file
+7. In production deploy: run `alembic upgrade head` before starting the server
 
 ---
 
 ## Backend — Render / Railway / Fly.io
 
-### Environment variables (required)
+### Environment variables (required in production)
 
 | Variable | Description | Example |
 |---|---|---|
-| `JWT_SECRET_KEY` | Min 32-char random string. Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` | `abc123...` |
+| `JWT_SECRET_KEY` | Min 32-char random string | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+psycopg2://user:pass@host:5432/athlyt` |
 | `CORS_ORIGINS` | Comma-separated allowed origins | `https://athlyt.vercel.app` |
-| `ENVIRONMENT` | `production` | `production` |
-| `DEBUG` | `false` | `false` |
+| `ENVIRONMENT` | Must be `production` | `production` |
+| `DEBUG` | `false` in production | `false` |
 
 ### Build command
 ```bash
 pip install -e .
 ```
 
-### Start command
+### Start command (pre-deploy step runs migrations first)
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
+alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-### PostgreSQL migration (SQLite → Postgres)
+Alternatively, split into a pre-deploy command and a start command on platforms that support it (Render, Railway):
+- **Pre-deploy**: `alembic upgrade head`
+- **Start**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
-1. Install psycopg2: `pip install psycopg2-binary`
-2. Set `DATABASE_URL=postgresql+psycopg2://...` in `.env`
-3. The schema creates itself on first boot (`Base.metadata.create_all()` in lifespan)
-4. Seed data re-runs automatically and is idempotent
-5. **Before first real user data**: add Alembic for proper migrations
+### Render-specific setup
 
-### Render-specific notes
-- Set `PORT` is provided automatically by Render; uvicorn reads it via `$PORT`
-- Add a health check on `/api/v1/health` with 30s interval, 3 retries
+1. Create a new **Web Service** pointing to your GitHub repo
+2. Set root directory to `backend/`
+3. Build command: `pip install -e .`
+4. Start command: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+5. Add a **PostgreSQL** database add-on → copy the connection string to `DATABASE_URL`
+6. Add all required environment variables
+7. Set health check path: `/api/v1/health`
 
-### Fly.io-specific notes
+### Railway-specific setup
+
+1. Create a new project → deploy from GitHub
+2. Add a **PostgreSQL** plugin → Railway sets `DATABASE_URL` automatically
+3. Set the start command in `railway.toml` or the UI:
+   ```
+   alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   ```
+
+### Fly.io-specific setup
+
 ```toml
 # fly.toml
 [http_service]
@@ -56,6 +132,9 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
   interval = "30s"
   method = "GET"
   path = "/api/v1/health"
+
+[deploy]
+  release_command = "alembic upgrade head"
 ```
 
 ---
@@ -66,18 +145,36 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 | Variable | Description |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | Backend URL, e.g. `https://athlyt-api.onrender.com/api/v1` |
+| `NEXT_PUBLIC_API_URL` | Backend URL e.g. `https://athlyt-api.onrender.com/api/v1` |
 
-### Deploy settings (auto-detected)
+### Deploy settings (auto-detected by Vercel)
 - **Framework**: Next.js
 - **Build command**: `npm run build`
-- **Output directory**: `.next`
 - **Install command**: `npm install`
 
-### Notes
-- `reactStrictMode: true` is set in `next.config.ts`
-- Security headers are configured in `next.config.ts`
-- No server components or API routes — purely static + client-side after first load
+---
+
+## PostgreSQL — Local development
+
+If you want to develop against PostgreSQL locally instead of SQLite:
+
+```bash
+# Install PostgreSQL (macOS)
+brew install postgresql@16 && brew services start postgresql@16
+
+# Create database
+createdb athlyt
+
+# Update .env
+DATABASE_URL=postgresql+psycopg2://localhost/athlyt
+
+# Run migrations
+cd backend
+alembic upgrade head
+
+# Start server
+uvicorn app.main:app --reload
+```
 
 ---
 
@@ -88,39 +185,21 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 - [ ] `ENVIRONMENT=production` and `DEBUG=false`
 - [ ] `DATABASE_URL` points to managed PostgreSQL (not SQLite)
 - [ ] `NEXT_PUBLIC_API_URL` points to the deployed backend
+- [ ] `alembic upgrade head` runs successfully against the production database before server start
 - [ ] Health check passes at `/api/v1/health`
-- [ ] Test the full auth flow (register → onboard → generate plan) on production
+- [ ] Full auth flow tested on production (register → onboard → generate plan)
 
 ---
 
-## Adding Alembic (before first real user data)
+## Connection pool notes
 
-```bash
-cd backend
-pip install alembic
-alembic init alembic
+`session.py` configures PostgreSQL-specific pool settings when `DATABASE_URL` starts with `postgresql`:
 
-# Edit alembic/env.py — replace target_metadata line:
-from app.db.base import Base
-target_metadata = Base.metadata
+| Setting | Value | Why |
+|---|---|---|
+| `pool_size` | 5 | Sufficient for a small deployment |
+| `max_overflow` | 10 | Allows burst traffic |
+| `pool_pre_ping` | True | Reconnects stale connections — prevents errors after database idles (common on free-tier Render/Railway) |
+| `pool_recycle` | 300s | Recycles connections every 5 minutes |
 
-# Generate first migration from existing models:
-alembic revision --autogenerate -m "initial schema"
-alembic upgrade head
-```
-
-Then replace `Base.metadata.create_all()` in `app/main.py` with:
-```python
-# Don't use create_all in production — Alembic handles this
-if settings.ENVIRONMENT == "local":
-    Base.metadata.create_all(bind=engine)
-```
-
----
-
-## Scaling notes (for interview discussions)
-
-- **Backend**: horizontal scaling is safe (stateless, no in-process caches). SQLAlchemy's connection pool handles concurrent requests.
-- **Database**: PostgreSQL's connection pooling (PgBouncer) recommended if running many backend instances.
-- **ML inference**: currently loaded at process startup (`joblib.load`). Move to a separate worker or cache warming if cold starts become an issue.
-- **Media storage**: progress photos would go to S3/Cloudflare R2 — not implemented yet, but the pattern is `progress_photos` table with `photo_url` pointing to object storage, not the blob itself.
+Adjust these in `app/db/session.py` if you're running under higher concurrency or behind PgBouncer.
