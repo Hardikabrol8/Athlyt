@@ -8,11 +8,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Planned
-- Alembic migrations (before PostgreSQL production deployment)
-- ML workout recommendation model (scikit-learn, trained in Colab)
+- ML workout recommendation model (scikit-learn, trained in Colab — inference layer already wired)
 - Progress photo upload (S3/R2 object storage)
 - Push notifications / reminders
 - AI coach chatbot (LLM-backed conversation)
+- Refresh-token rotation (currently a single 7-day access token)
+
+---
+
+## [1.0.0] — Live Production Deployment
+
+### Added
+- Deployed live: frontend on Vercel, backend on Render, database on Neon PostgreSQL
+- Comprehensive root-level `DEPLOYMENT.md` — codebase-specific step-by-step guide covering Render/Vercel/Neon setup, environment variable reference, security review, custom domain + SSL setup, pre-deployment testing checklist, post-deployment verification checklist, and a 20-item troubleshooting table
+
+### Fixed
+- Ruff/black version drift between local dev and CI — pinned both to exact versions (`ruff==0.15.20`, `black==25.12.0`) after a newer CI-resolved ruff version flagged `UP042` (str+Enum pattern) and a newer black reformatted an Alembic-generated migration file that had never been run through black
+- Ignored `UP042` explicitly in `ruff` config — the project deliberately uses `(str, Enum)` throughout `app/models/enums.py` for SQLAlchemy compatibility, not `StrEnum`
+
+---
+
+## [0.5.0] — Production Readiness (Backend Hardening)
+
+### Added
+- `app/core/logging_config.py` — structured logging, DEBUG in local/test, INFO in production, correctly scoped so `app.*` loggers propagate to root without duplicate output
+- `app/core/security_headers.py` — `SecurityHeadersMiddleware` adding baseline security headers to every API response
+- `TrustedHostMiddleware` + `ALLOWED_HOSTS` setting — rejects requests with an unrecognized `Host` header
+- Dedicated Neon PostgreSQL section in deployment docs (SSL requirement, autosuspend behavior, connection limits)
+- `docker-compose.yml`, `docker-compose.override.yml` — full local stack (postgres + backend + frontend) with dev-mode hot reload
+- `backend/Dockerfile`, `frontend/Dockerfile` (+ `Dockerfile.dev`) — multi-stage production builds
+- GitHub Actions CI — `backend-ci.yml` (pytest/ruff/black) and `frontend-ci.yml` (install/lint/build), path-filtered and cached
+
+### Fixed
+- **Silent unhandled exceptions** — registering a custom `Exception` handler had replaced Starlette's default traceback-logging middleware; every unhandled 500 was previously invisible in logs. Fixed with explicit `logger.exception(...)`.
+- Alembic migration file's trailing whitespace (auto-generated, never previously run through `black`)
+
+### Changed
+- `app/main.py` — `create_all()` now only runs in `local`/`test` environments; production schema is managed exclusively by Alembic
+
+---
+
+## [0.4.1] — Alembic & PostgreSQL Migration Readiness
+
+### Added
+- Alembic initialized — `alembic/env.py` supports both SQLite (dev/test) and PostgreSQL (production) from the same codebase, with `render_as_batch=True` for SQLite ALTER support and `compare_type=True` for enum change detection
+- Initial migration (`alembic/versions/..._initial_schema.py`) covering all 13 tables, every FK with CASCADE rules, every index, all `native_enum=False` enums
+- PostgreSQL connection pool tuning in `app/db/session.py` (`pool_pre_ping`, `pool_size`, `pool_recycle`) — handles free-tier database autosuspend gracefully
 
 ---
 

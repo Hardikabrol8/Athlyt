@@ -6,14 +6,47 @@
 
 An AI-powered fitness coaching platform — personalised workout plans, nutrition tracking, progress analytics, and workout session management. Built as a production-quality portfolio project demonstrating full-stack + ML engineering.
 
+**🔴 [Live Demo](https://athlyt-taupe.vercel.app)** · **[API Docs](https://athlyt-backend.onrender.com/docs)**
+
 [![Backend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml)
 [![Frontend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml)
-[![Backend Tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)](backend/tests)
+[![Backend Tests](https://img.shields.io/badge/tests-220%20passing-brightgreen)](backend/tests)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](backend/pyproject.toml)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](frontend/package.json)
-[![License](https://img.shields.io/badge/license-MIT-blue)](#license)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 </div>
+
+> **Note:** the live demo runs on Render's free tier, which sleeps after ~15 minutes of inactivity. The first request after a period of inactivity may take 30–60 seconds to respond while the backend wakes up — this is expected free-tier behavior, not a bug.
+
+---
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/landing.png" alt="Athlyt landing page" />
+      <p align="center"><em>Landing page</em></p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/dashboard.png" alt="Athlyt dashboard" />
+      <p align="center"><em>Dashboard</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/nutrition.png" alt="Athlyt nutrition and meal plan" />
+      <p align="center"><em>Nutrition & meal planning</em></p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/progress.png" alt="Athlyt progress tracking" />
+      <p align="center"><em>Progress tracking</em></p>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -39,7 +72,7 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 | **Backend** | FastAPI, SQLAlchemy 2.0, Pydantic v2, PyJWT, bcrypt |
 | **Database** | SQLite (dev) / PostgreSQL-compatible (prod) |
 | **ML** | scikit-learn — trained offline in Colab, loaded via joblib |
-| **Testing** | pytest (214 tests), ruff, black |
+| **Testing** | pytest (220 tests), ruff, black |
 
 ---
 
@@ -229,7 +262,7 @@ athlyt/
 │   │   ├── schemas/           — Pydantic request/response schemas
 │   │   ├── core/              — Config, security, exceptions
 │   │   └── db/                — Engine, session, seed data
-│   └── tests/                 — 214 pytest tests
+│   └── tests/                 — 220 pytest tests
 ├── frontend/
 │   ├── app/                   — Next.js App Router pages
 │   ├── components/            — UI components (shared + domain)
@@ -239,10 +272,10 @@ athlyt/
 ├── ml/
 │   ├── notebooks/             — Colab training notebooks
 │   └── models/                — Exported .joblib artifacts
+├── DEPLOYMENT.md              — Step-by-step production deployment guide
 └── docs/
     ├── ARCHITECTURE.md
     ├── DATABASE_SCHEMA.md
-    ├── DEPLOYMENT.md
     ├── PROJECT_BIBLE.md
     └── API_REFERENCE.md
 ```
@@ -277,7 +310,7 @@ Health:      GET  /health, /health/detailed
 ## Testing
 
 ```bash
-# Backend — 214 tests
+# Backend — 220 tests
 cd backend && pytest
 
 # Lint & format
@@ -303,18 +336,23 @@ GitHub Actions runs on every push and pull request:
 
 Both workflows fail the run (and block merging, if branch protection is enabled) if any step fails. Dependencies are cached (`pip` cache keyed on `pyproject.toml`, `npm` cache keyed on `package-lock.json`) so subsequent runs are fast. Path filtering means a frontend-only change doesn't trigger the backend workflow and vice versa.
 
-See `.github/workflows/` for the workflow definitions. CI does not deploy anything — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the deployment guide.
+See `.github/workflows/` for the workflow definitions. CI does not deploy anything — see [DEPLOYMENT.md](DEPLOYMENT.md) for the deployment guide.
 
 ---
 
 ## Deployment
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the full Vercel + Render deployment guide.
+**Currently live:**
+- Frontend: [athlyt-taupe.vercel.app](https://athlyt-taupe.vercel.app) (Vercel)
+- Backend: [athlyt-backend.onrender.com](https://athlyt-backend.onrender.com) (Render)
+- Database: Neon (serverless PostgreSQL)
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete step-by-step guide this deployment followed — exact build/start commands, environment variable reference, security review, custom domain setup, and a 20-item troubleshooting table drawn from real issues hit during this deployment.
 
 **Short version:**
-- Frontend → Vercel (zero config, auto-detected Next.js)
-- Backend → Render/Railway/Fly.io (`pip install -e . && uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
-- Database → PostgreSQL managed add-on (one-line `DATABASE_URL` change)
+- Frontend → Vercel (root directory `frontend`, zero-config Next.js detection)
+- Backend → Render (root directory `backend`, build `pip install -e .`, start `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
+- Database → Neon PostgreSQL (`DATABASE_URL` with `?sslmode=require`)
 
 ---
 
@@ -328,14 +366,20 @@ Key design: SQLite in dev, PostgreSQL-compatible by design (UUIDs as `String(36)
 
 ## Roadmap
 
-- [ ] Alembic migrations (before first production deployment)
-- [ ] ML workout recommendation model (scikit-learn, Colab training pipeline)
+**Completed:**
+- [x] Alembic migrations
+- [x] Docker Compose for one-command local setup
+- [x] CI/CD (GitHub Actions — backend + frontend)
+- [x] Production deployment (Vercel + Render + Neon PostgreSQL)
+- [x] Structured logging, security headers, trusted-host protection
+
+**Remaining:**
+- [ ] ML workout recommendation model (scikit-learn, Colab training pipeline — inference layer already wired, awaiting a trained artifact)
 - [ ] AI coach (LLM-backed chatbot)
 - [ ] Progress photo upload (S3/R2)
 - [ ] Email verification + password reset
 - [ ] Push notifications / workout reminders
-- [ ] Docker Compose for one-command local setup
-- [ ] CI/CD (GitHub Actions)
+- [ ] Refresh-token rotation (currently a single 7-day access token)
 
 ---
 
@@ -344,7 +388,7 @@ Key design: SQLite in dev, PostgreSQL-compatible by design (UUIDs as `String(36)
 A few non-obvious choices worth knowing:
 
 - **Synchronous SQLAlchemy** — FastAPI runs sync deps in a threadpool; no async overhead needed at this scale.
-- **Alembic in production, `create_all()` in local/test** — production schema is managed exclusively by Alembic migrations (`alembic upgrade head` runs pre-deploy); local dev and tests still use `create_all()` for convenience, since neither has a schema history that matters. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+- **Alembic in production, `create_all()` in local/test** — production schema is managed exclusively by Alembic migrations (`alembic upgrade head` runs pre-deploy); local dev and tests still use `create_all()` for convenience, since neither has a schema history that matters. See [DEPLOYMENT.md](DEPLOYMENT.md).
 - **Single JWT** — 7-day access token, no refresh rotation. Right tradeoff for a portfolio demo.
 - **`CORS_ORIGINS` and `ALLOWED_HOSTS` with `NoDecode`** — pydantic-settings v2 would JSON-decode a list env var before the validator runs; `NoDecode` prevents this.
 - **Pause/resume uses `accumulated_active_seconds`** — naive `completed_at - started_at` would count paused time as training time.
