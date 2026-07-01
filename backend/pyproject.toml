@@ -47,7 +47,12 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]
+# E501: line length — handled by black, not worth ruff duplicating.
+# UP042: "use enum.StrEnum instead of (str, Enum)" — deliberately ignored.
+# Every enum in app/models/enums.py intentionally inherits from (str, Enum),
+# not StrEnum, because that's the pattern SQLAlchemy's Enum column type and
+# Pydantic v2 schemas were built and tested against throughout this codebase.
+ignore = ["E501", "UP042"]
 
 [tool.black]
 line-length = 100
