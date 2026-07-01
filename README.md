@@ -6,6 +6,8 @@
 
 An AI-powered fitness coaching platform — personalised workout plans, nutrition tracking, progress analytics, and workout session management. Built as a production-quality portfolio project demonstrating full-stack + ML engineering.
 
+[![Backend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml)
+[![Frontend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml)
 [![Backend Tests](https://img.shields.io/badge/tests-214%20passing-brightgreen)](backend/tests)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](backend/pyproject.toml)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](frontend/package.json)
@@ -286,6 +288,21 @@ cd frontend && npm run build
 # Frontend lint
 npm run lint
 ```
+
+---
+
+## CI/CD
+
+GitHub Actions runs on every push and pull request:
+
+| Workflow | Triggers on changes to | Steps |
+|---|---|---|
+| `backend-ci.yml` | `backend/**` | `pip install` → `pytest` → `ruff check` → `black --check` |
+| `frontend-ci.yml` | `frontend/**` | `npm ci` → `npm run lint` → `npm run build` |
+
+Both workflows fail the run (and block merging, if branch protection is enabled) if any step fails. Dependencies are cached (`pip` cache keyed on `pyproject.toml`, `npm` cache keyed on `package-lock.json`) so subsequent runs are fast. Path filtering means a frontend-only change doesn't trigger the backend workflow and vice versa.
+
+See `.github/workflows/` for the workflow definitions. CI does not deploy anything — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the deployment guide.
 
 ---
 
