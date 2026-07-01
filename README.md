@@ -55,6 +55,102 @@ Full architecture documentation: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
+
+---
+
+## Docker
+
+The fastest way to run the full stack locally — PostgreSQL, backend, and frontend in one command.
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac/Windows) or Docker Engine + Compose plugin (Linux)
+
+### Quick start
+
+```bash
+# 1. Copy the root env file and set your secret key
+cp .env.example .env
+
+# Generate a real JWT_SECRET_KEY:
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+# Paste the output into .env as JWT_SECRET_KEY
+
+# 2. Start everything (builds images on first run)
+docker compose up --build
+
+# 3. Access the stack
+#   Frontend  → http://localhost:3000
+#   Backend   → http://localhost:8000
+#   API docs  → http://localhost:8000/docs
+```
+
+### Services
+
+| Service | Port | Description |
+|---|---|---|
+|  | 3000 | Next.js 15 production build |
+|  | 8000 | FastAPI + Uvicorn |
+|  | 5432 | PostgreSQL 16 (data persisted in Docker volume) |
+
+### Development mode (hot reload)
+
+The  is applied automatically and enables:
+- Backend hot-reload (source mounted, uvicorn )
+- Frontend hot-reload (source mounted, )
+
+```bash
+# Development mode is the default — no extra flags needed
+docker compose up --build
+```
+
+### Production mode (no hot reload, optimised builds)
+
+```bash
+# Skip the override file to use production config only
+docker compose -f docker-compose.yml up --build
+```
+
+### Common commands
+
+```bash
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (wipes the database)
+docker compose down -v
+
+# View logs
+docker compose logs -f backend
+docker compose logs -f frontend
+
+# Run backend tests inside the container
+docker compose exec backend python -m pytest -q
+
+# Run Alembic migrations manually
+docker compose exec backend alembic upgrade head
+
+# Open a psql shell
+docker compose exec postgres psql -U athlyt -d athlyt
+
+# Rebuild a single service after code changes
+docker compose up --build backend
+```
+
+### Environment variables
+
+All configuration is in the root  file (copied from ):
+
+| Variable | Required | Description |
+|---|---|---|
+|  | ✅ | Random string ≥ 32 chars |
+|  | ✅ | Database password |
+|  | — | Default:  |
+|  | — | Default:  |
+|  | — | Default:  |
+|  | — | Default:  |
+
+> **Note:**  is baked into the Next.js bundle at **build time**. Changing it after the image is built requires a rebuild ().
+
 ## Quick start
 
 ### Prerequisites

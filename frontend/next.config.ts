@@ -4,6 +4,13 @@ const nextConfig: NextConfig = {
   // Strict mode catches common React bugs during development
   reactStrictMode: true,
 
+  // Standalone output bundles only the files needed to run in production,
+  // dramatically reducing the Docker image size. Next.js traces imports and
+  // includes only what's actually used — no full node_modules in the runtime
+  // layer. Enabled when NEXT_STANDALONE=true (set in the Dockerfile).
+  // https://nextjs.org/docs/app/api-reference/config/next-config-js/output
+  output: process.env.NEXT_STANDALONE === "true" ? "standalone" : undefined,
+
   // Security headers for production
   async headers() {
     return [
