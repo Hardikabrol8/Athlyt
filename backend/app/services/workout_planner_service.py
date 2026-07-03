@@ -169,6 +169,21 @@ _SPLIT_TEMPLATES: dict[str, list[DayTemplate]] = {
         DayTemplate("Day 2 — Lower Body", "Legs & Core", ["legs", "core"]),
         DayTemplate("Day 3 — Full Body", "Full Body Circuit", ["chest", "back", "legs", "core"]),
         DayTemplate("Day 4 — Core & Back", "Back & Core", ["back", "core"]),
+        # Days 5-7 cycle back through the same 4-day rotation — this is the
+        # only split whose `max_days` (in workout_splits.py) is 7, so it's
+        # the only one that must support that many templates. Every other
+        # split's template list length already exactly matches its own
+        # `max_days` (Push Pull Legs: 6/6, Bro Split: 6/6, etc.) — this
+        # split previously had only 4 templates while claiming max_days=7,
+        # so requesting a 7-day plan silently produced a 4-day plan with a
+        # `workout_days: 7` label on it. Fixed by extending the cycle,
+        # matching the same "repeat the rotation" convention Push Pull Legs
+        # and Bro Split already use for their own repeat days.
+        DayTemplate(
+            "Day 5 — Upper Body", "Chest, Shoulders & Arms", ["chest", "shoulders", "arms"]
+        ),
+        DayTemplate("Day 6 — Lower Body", "Legs & Core", ["legs", "core"]),
+        DayTemplate("Day 7 — Full Body", "Full Body Circuit", ["chest", "back", "legs", "core"]),
     ],
 }
 

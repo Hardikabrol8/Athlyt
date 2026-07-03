@@ -247,6 +247,52 @@ class TestWorkoutPlannerServiceGenerate:
         )
         assert len(result.days) == 3
 
+    def test_home_bodyweight_generates_7_days_when_requested(self, db: Session):
+        """Regression test: Home Bodyweight Split's `max_days` (in
+        workout_splits.py) is 7 — the only split allowed that high — but its
+        `_SPLIT_TEMPLATES` list previously had only 4 entries. Requesting a
+        7-day plan silently produced a 4-day plan while the response still
+        claimed `workout_days: 7`, causing a real dashboard/weekly-plan
+        mismatch (and an IndexError in any test or frontend code that
+        assumed all 7 days existed). See workout_planner_service.py's
+        `_SPLIT_TEMPLATES["Home Bodyweight Split"]` for the fix."""
+        svc = WorkoutPlannerService()
+        rec = _make_recommendation("Home Bodyweight Split", "Beginner", 7)
+        result = svc.generate_and_save(
+            db=db,
+            user_id="test-user-planner-hb7",
+            user_equipment=["bodyweight"],
+            recommendation=rec,
+            fitness_goal=FitnessGoal.general_fitness,
+        )
+        assert len(result.days) == 7
+        assert result.workout_days == 7
+
+    def test_every_split_supports_its_own_max_days(self, db: Session):
+        """Systematic version of the regression above: every split's
+        template list must be at least as long as that split's own
+        `max_days` (from workout_splits.py), or requesting the maximum
+        allowed days for that split silently truncates the plan. This is
+        the invariant the Home Bodyweight bug violated — asserting it here
+        for all 6 splits means a future split addition can't reintroduce
+        the same class of bug without a test catching it immediately."""
+        from app.services.workout_splits import WORKOUT_SPLITS
+
+        svc = WorkoutPlannerService()
+        for split in WORKOUT_SPLITS:
+            rec = _make_recommendation(split.split_name, "Beginner", split.max_days)
+            result = svc.generate_and_save(
+                db=db,
+                user_id=f"test-user-maxdays-{split.key}",
+                user_equipment=["full_gym"],
+                recommendation=rec,
+                fitness_goal=FitnessGoal.general_fitness,
+            )
+            assert len(result.days) == split.max_days, (
+                f"{split.split_name} promises max_days={split.max_days} "
+                f"but only generated {len(result.days)} days"
+            )
+
     def test_each_day_has_exercises(self, db: Session):
         svc = WorkoutPlannerService()
         rec = _make_recommendation("Upper Lower", "Intermediate", 4)
