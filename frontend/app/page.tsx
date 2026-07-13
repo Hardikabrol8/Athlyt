@@ -1,62 +1,55 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Link from "next/link";
 
-import { BackendStatus } from "@/components/backend-status";
 import { AmbientBackground } from "@/components/shared/ambient-background";
 import { PrimaryButton } from "@/components/shared/primary-button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FAQSection } from "@/components/landing/faq-section";
+import { FeaturesSection } from "@/components/landing/features-section";
+import { HeroSection } from "@/components/landing/hero-section";
+import { HowItWorksSection } from "@/components/landing/how-it-works-section";
+import { LandingFooter } from "@/components/landing/landing-footer";
+import { ScreenshotsSection } from "@/components/landing/screenshots-section";
+import { TestimonialsSection } from "@/components/landing/testimonials-section";
+import { TrustSection } from "@/components/landing/trust-section";
 
+/**
+ * The public marketing landing page — everything a visitor sees before
+ * signing up. Composed of independent section components under
+ * `components/landing/` so each section can be edited or reordered without
+ * touching the others. Authentication itself (the actual login/register
+ * forms, validators, and API calls) lives entirely in `app/(auth)/` and is
+ * untouched by this page.
+ */
 export default function Home() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center gap-8 overflow-hidden p-6">
+    <main className="relative overflow-hidden">
       <AmbientBackground />
 
-      <div className="absolute right-6 top-6 z-10">
-        <ThemeToggle />
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 flex flex-col items-center gap-2 text-center"
-      >
-        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">
+      {/* Sticky top bar — brand + theme toggle + sign-in shortcut */}
+      <header className="glass-card sticky top-0 z-20 flex items-center justify-between rounded-none border-x-0 border-t-0 px-6 py-3">
+        <Link href="/" className="text-lg font-bold tracking-tight">
           <span className="text-gradient-brand">Athlyt</span>
-        </h1>
-        <p className="max-w-sm text-muted-foreground">
-          Your AI-powered fitness coach. Personalized workouts, smarter progress.
-        </p>
-      </motion.div>
+        </Link>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <PrimaryButton asChild size="sm">
+            <Link href="/login">Sign in</Link>
+          </PrimaryButton>
+        </div>
+      </header>
 
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-sm"
-      >
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Get started</CardTitle>
-            <CardDescription>Create an account or sign in to continue.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <BackendStatus />
-            <div className="flex gap-2">
-              <PrimaryButton asChild className="flex-1">
-                <Link href="/login">Sign in</Link>
-              </PrimaryButton>
-              <Button asChild className="flex-1" variant="outline">
-                <Link href="/register">Create account</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+      <div className="relative z-10">
+        <HeroSection />
+        <TrustSection />
+        <FeaturesSection />
+        <HowItWorksSection />
+        <ScreenshotsSection />
+        <TestimonialsSection />
+        <FAQSection />
+        <LandingFooter />
+      </div>
     </main>
   );
 }

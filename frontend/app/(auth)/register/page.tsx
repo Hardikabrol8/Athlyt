@@ -16,6 +16,17 @@ import { handleAuthSuccess } from "@/lib/handle-auth-success";
 import { type RegisterFormValues, registerSchema } from "@/lib/validators/auth";
 import type { AuthResponse } from "@/types/user";
 
+/**
+ * Purely informational — shown below the register form so people know
+ * what's coming right after they sign up, and why. Not part of the actual
+ * onboarding flow itself (that's a separate page, untouched by this file).
+ */
+const ONBOARDING_PREVIEW_STEPS = [
+  "Your body & goals — age, weight, height, and what you're training for",
+  "Your experience & equipment — so your plan actually fits what you have",
+  "Your schedule — how many days a week you want to train",
+];
+
 export default function RegisterPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -41,6 +52,7 @@ export default function RegisterPage() {
   });
 
   return (
+    <>
     <Card className="w-full shadow-lg">
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
@@ -111,5 +123,24 @@ export default function RegisterPage() {
         </p>
       </CardContent>
     </Card>
+
+    {/* Purely informational — see ONBOARDING_PREVIEW_STEPS above. Not part
+        of the actual registration form or its submit logic. */}
+    <div className="mt-4 space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
+      <p className="font-medium">Right after this, you&apos;ll tell us:</p>
+      <ol className="space-y-1.5 text-muted-foreground">
+        {ONBOARDING_PREVIEW_STEPS.map((step, i) => (
+          <li key={step} className="flex gap-2">
+            <span className="font-medium text-primary">{i + 1}.</span>
+            {step}
+          </li>
+        ))}
+      </ol>
+      <p className="text-xs text-muted-foreground">
+        We only ask for this to build your actual workout and nutrition plan —
+        never for anything else.
+      </p>
+    </div>
+    </>
   );
 }

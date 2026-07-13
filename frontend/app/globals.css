@@ -319,3 +319,38 @@
     }
   }
 }
+
+@layer utilities {
+  /* Accordion open/close animation — driven by radix's data-state attribute
+   * and its --radix-accordion-content-height CSS variable, which radix sets
+   * automatically based on the content's measured height. */
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  .animate-accordion-down {
+    animation: accordion-down 0.2s ease-out;
+  }
+  .animate-accordion-up {
+    animation: accordion-up 0.2s ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-accordion-down,
+    .animate-accordion-up {
+      animation: none !important;
+    }
+  }
+}
