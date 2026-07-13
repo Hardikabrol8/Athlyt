@@ -77,7 +77,19 @@ def user_with_plan(db: Session):
 
     recommendation = RecommendationResponse(
         title="Test Plan",
-        split_name="Push Pull Legs",
+        # "Home Bodyweight Split" is the only split whose max_days (in
+        # workout_splits.py) is actually 7 — it was previously hardcoded
+        # here as "Push Pull Legs" (max_days=6), an impossible combination
+        # the real /workouts/recommend endpoint could never produce, since
+        # push_pull_legs would be disqualified outright for a 7-day
+        # request. That mismatch caused the planner to silently generate
+        # only 6 real days while this fixture's plan.workout_days still
+        # claimed 7, so `_get_todays_day` could compute a day_index (0-6)
+        # that pointed past the end of the 6-day list on certain weekdays
+        # — the same class of bug fixed in workout_planner_service.py's
+        # `_SPLIT_TEMPLATES`, but reintroduced here via a fixture that
+        # bypassed the real recommendation step entirely.
+        split_name="Home Bodyweight Split",
         workout_days=7,
         difficulty="Intermediate",
         reason="Test fixture.",
