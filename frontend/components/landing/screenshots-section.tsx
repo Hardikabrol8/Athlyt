@@ -2,16 +2,17 @@
 
 import { motion, type Variants } from "framer-motion";
 import { BarChart3, Dumbbell, LayoutDashboard, UtensilsCrossed } from "lucide-react";
+import Image from "next/image";
 
 import { SectionHeader } from "@/components/shared/section-header";
 import { TiltCard } from "@/components/shared/tilt-card";
 import { Card, CardContent } from "@/components/ui/card";
 
 /**
- * PLACEHOLDER SCREENSHOTS — replace `imageSrc` with a real screenshot path
- * (e.g. "/screenshots/dashboard.png") once available. Until then each card
- * renders an icon-based placeholder so the section works without any real
- * images checked in yet.
+ * Real screenshots for all four cards: Dashboard, Workout Planner,
+ * Nutrition, and Analytics (Analytics uses the Progress page screenshot —
+ * weight trend, streaks, personal records — which is what "Analytics"
+ * refers to here).
  */
 const SCREENSHOTS: Array<{
   icon: typeof LayoutDashboard;
@@ -23,25 +24,25 @@ const SCREENSHOTS: Array<{
     icon: LayoutDashboard,
     title: "Dashboard",
     description: "Today's workout, weekly plan, and your key stats at a glance.",
-    // imageSrc: "/screenshots/dashboard.png",
+    imageSrc: "/screenshots/dashboard.png",
   },
   {
     icon: Dumbbell,
     title: "Workout Planner",
     description: "A full weekly split with real exercises, sets, and reps.",
-    // imageSrc: "/screenshots/workouts.png",
+    imageSrc: "/screenshots/workouts.png",
   },
   {
     icon: UtensilsCrossed,
     title: "Nutrition",
     description: "Daily macro targets and a complete generated meal plan.",
-    // imageSrc: "/screenshots/nutrition.png",
+    imageSrc: "/screenshots/nutrition.png",
   },
   {
     icon: BarChart3,
     title: "Analytics",
     description: "Weight trend, streaks, personal records, and activity heatmap.",
-    // imageSrc: "/screenshots/analytics.png",
+    imageSrc: "/screenshots/analytics.png",
   },
 ];
 
@@ -87,15 +88,16 @@ export function ScreenshotsSection() {
             <motion.div key={shot.title} variants={item}>
               <TiltCard intensity={5}>
                 <Card className="overflow-hidden">
-                  {/* Placeholder visual area — swap for a real <img> once a
-                      screenshot exists at `imageSrc`. */}
                   {shot.imageSrc ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- placeholder path, swap for next/image once a real asset exists
-                    <img
-                      src={shot.imageSrc}
-                      alt={`${shot.title} screenshot`}
-                      className="aspect-video w-full object-cover"
-                    />
+                    <div className="relative aspect-video w-full">
+                      <Image
+                        src={shot.imageSrc}
+                        alt={`${shot.title} screenshot`}
+                        fill
+                        className="object-cover object-top"
+                        sizes="(max-width: 640px) 100vw, 50vw"
+                      />
+                    </div>
                   ) : (
                     <div className="flex aspect-video w-full items-center justify-center bg-gradient-to-br from-primary/10 via-accent/10 to-transparent">
                       <shot.icon className="size-12 text-muted-foreground/40" />

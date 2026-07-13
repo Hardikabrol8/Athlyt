@@ -47,7 +47,7 @@ export function LandingFooter() {
       </div>
 
       <p className="mt-8 text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} Athlyt. Built as a portfolio project.
+        &copy; {new Date().getFullYear()} Athlyt. All rights reserved.
       </p>
     </footer>
   );
