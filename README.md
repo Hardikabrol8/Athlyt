@@ -10,7 +10,7 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 
 [![Backend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml)
 [![Frontend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml)
-[![Backend Tests](https://img.shields.io/badge/tests-220%20passing-brightgreen)](backend/tests)
+[![Backend Tests](https://img.shields.io/badge/tests-222%20passing-brightgreen)](backend/tests)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](backend/pyproject.toml)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](frontend/package.json)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -18,8 +18,6 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 </div>
 
 > **Note:** the live demo runs on Render's free tier, which sleeps after ~15 minutes of inactivity. The first request after a period of inactivity may take 30–60 seconds to respond while the backend wakes up — this is expected free-tier behavior, not a bug.
-
----
 
 ---
 
@@ -60,7 +58,8 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 | **Statistics** | Streaks, personal records, weekly volume, 365-day activity heatmap |
 | **Progress** | Weight/body fat/sleep logging, body measurements, weight trend chart |
 | **Nutrition** | Rule-based meal plan generation (non-veg/vegetarian/vegan), daily macro logging |
-| **UI** | Dark mode, cursor-following glow, ambient gradient orbs, 3D tilt cards, responsive sidebar |
+| **Machine Learning** | RandomForestClassifier trained on 100,000 synthetic profiles (98.4% test accuracy) to predict workout-split recommendations — trained and evaluated, not yet swapped in for the rule engine in production. See [ML section](#machine-learning) below. |
+| **UI** | Premium landing page, split-screen auth, dark mode, cursor-following glow, ambient gradient orbs, 3D tilt cards, responsive sidebar |
 
 ---
 
@@ -70,9 +69,11 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 |---|---|
 | **Frontend** | Next.js 15, TypeScript, Tailwind CSS v4, shadcn/ui, Framer Motion, Recharts |
 | **Backend** | FastAPI, SQLAlchemy 2.0, Pydantic v2, PyJWT, bcrypt |
-| **Database** | SQLite (dev) / PostgreSQL-compatible (prod) |
-| **ML** | scikit-learn — trained offline in Colab, loaded via joblib |
-| **Testing** | pytest (220 tests), ruff, black |
+| **Database** | SQLite (dev) / PostgreSQL via Neon (prod) |
+| **ML** | scikit-learn (RandomForestClassifier), trained in Colab, loaded via joblib |
+| **Testing** | pytest (222 tests), ruff, black |
+| **CI/CD** | GitHub Actions (backend + frontend, on every push/PR) |
+| **Containerization** | Docker + Docker Compose (backend, frontend, PostgreSQL) |
 
 ---
 
@@ -81,15 +82,31 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 ```
 Browser
   └── Next.js 15 (Vercel)
-        └── FastAPI /api/v1 (Render/Railway)
-              ├── Router → Service → Repository → SQLAlchemy ORM → SQLite/PostgreSQL
-              └── ML inference layer (joblib model, loaded at startup)
+        └── FastAPI /api/v1 (Render)
+              ├── Router → Service → Repository → SQLAlchemy ORM → PostgreSQL (Neon)
+              └── ML inference layer (joblib model, trained — integration planned, not yet wired in)
 ```
 
 Full architecture documentation: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
+## Machine Learning
+
+A `RandomForestClassifier` has been trained to predict the same workout-split recommendation the rule engine produces — trained on 100,000 synthetic user profiles, each labeled by directly calling the real, deployed rule engine (not an approximation of it).
+
+| Metric | Result |
+|---|---|
+| Test accuracy | 98.44% |
+| Test F1 (macro) | 98.65% |
+| Dataset size | 100,000 synthetic profiles |
+| Model size | 71 MB (Git LFS) |
+
+**A genuine bug was discovered along the way:** one of the six workout splits (`bro_split`) can never actually be recommended by the current rule engine, under any input — verified exhaustively. See [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the full root-cause explanation.
+
+**Current status:** trained and evaluated, **not yet integrated into the backend** — the rule engine remains the only active recommendation engine in production. See [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) for the full integration design and [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the training pipeline, dataset generation, and evaluation writeup.
+
+> Model files (`ml/models/*.joblib`) are tracked via [Git LFS](https://git-lfs.github.com) — run `git lfs install` once before cloning to pull them correctly.
 
 ---
 
@@ -123,15 +140,15 @@ docker compose up --build
 
 | Service | Port | Description |
 |---|---|---|
-|  | 3000 | Next.js 15 production build |
-|  | 8000 | FastAPI + Uvicorn |
-|  | 5432 | PostgreSQL 16 (data persisted in Docker volume) |
+| `frontend` | 3000 | Next.js 15 production build |
+| `backend` | 8000 | FastAPI + Uvicorn |
+| `postgres` | 5432 | PostgreSQL 16 (data persisted in a Docker volume) |
 
 ### Development mode (hot reload)
 
-The  is applied automatically and enables:
-- Backend hot-reload (source mounted, uvicorn )
-- Frontend hot-reload (source mounted, )
+`docker-compose.override.yml` is applied automatically and enables:
+- Backend hot-reload (source mounted, `uvicorn --reload`)
+- Frontend hot-reload (source mounted, `npm run dev`)
 
 ```bash
 # Development mode is the default — no extra flags needed
@@ -171,22 +188,24 @@ docker compose exec postgres psql -U athlyt -d athlyt
 docker compose up --build backend
 ```
 
-### Environment variables
+### Environment variables (Docker Compose)
 
-All configuration is in the root  file (copied from ):
+All configuration is in the root `.env` file (copied from `.env.example`):
 
 | Variable | Required | Description |
 |---|---|---|
-|  | ✅ | Random string ≥ 32 chars |
-|  | ✅ | Database password |
-|  | — | Default:  |
-|  | — | Default:  |
-|  | — | Default:  |
-|  | — | Default:  |
+| `JWT_SECRET_KEY` | ✅ | Random string ≥ 32 chars |
+| `POSTGRES_PASSWORD` | ✅ | Database password |
+| `CORS_ORIGINS` | — | Default: `http://localhost:3000` |
+| `ALLOWED_HOSTS` | — | Default: `*` |
+| `ENVIRONMENT` | — | Default: `production` |
+| `NEXT_PUBLIC_API_URL` | — | Default: `http://localhost:8000/api/v1` |
 
-> **Note:**  is baked into the Next.js bundle at **build time**. Changing it after the image is built requires a rebuild ().
+> **Note:** `NEXT_PUBLIC_API_URL` is baked into the Next.js bundle at **build time**. Changing it after the image is built requires a rebuild (`docker compose up --build frontend`).
 
-## Quick start
+---
+
+## Quick start (without Docker)
 
 ### Prerequisites
 - Python 3.12+
@@ -219,7 +238,6 @@ cd frontend
 npm install
 
 # Configure environment
-# Create .env.local:
 echo "NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1" > .env.local
 
 npm run dev
@@ -256,26 +274,32 @@ athlyt/
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/routers/   — HTTP endpoints (thin layer)
-│   │   ├── services/          — Business logic
-│   │   ├── repositories/      — Database access
-│   │   ├── models/            — SQLAlchemy ORM models
-│   │   ├── schemas/           — Pydantic request/response schemas
-│   │   ├── core/              — Config, security, exceptions
-│   │   └── db/                — Engine, session, seed data
-│   └── tests/                 — 220 pytest tests
+│   │   ├── services/         — Business logic
+│   │   ├── repositories/     — Database access
+│   │   ├── models/           — SQLAlchemy ORM models
+│   │   ├── schemas/          — Pydantic request/response schemas
+│   │   ├── core/             — Config, security, logging, exceptions
+│   │   ├── db/                — Engine, session, seed data
+│   │   └── ml/                — Inference layer (planned integration point)
+│   ├── alembic/               — Database migrations
+│   └── tests/                 — 222 pytest tests
 ├── frontend/
 │   ├── app/                   — Next.js App Router pages
-│   ├── components/            — UI components (shared + domain)
+│   ├── components/            — UI components (shared, landing, auth, domain)
 │   ├── hooks/                 — TanStack Query data hooks
 │   ├── lib/                   — API client, validators, utilities
 │   └── types/                 — TypeScript interfaces
 ├── ml/
-│   ├── notebooks/             — Colab training notebooks
-│   └── models/                — Exported .joblib artifacts
-├── DEPLOYMENT.md              — Step-by-step production deployment guide
+│   ├── notebooks/             — generate_dataset.py + train_model.ipynb
+│   ├── data/                  — dataset.csv (100,000 synthetic profiles)
+│   ├── models/                — model.joblib, preprocessor.joblib, evaluation_report.md
+│   └── ML_TRAINING.md         — full training pipeline writeup
+├── DEPLOYMENT.md               — Step-by-step production deployment guide
+├── CHANGELOG.md                — Version history
 └── docs/
     ├── ARCHITECTURE.md
     ├── DATABASE_SCHEMA.md
+    ├── ML_ARCHITECTURE.md
     ├── PROJECT_BIBLE.md
     └── API_REFERENCE.md
 ```
@@ -310,7 +334,7 @@ Health:      GET  /health, /health/detailed
 ## Testing
 
 ```bash
-# Backend — 220 tests
+# Backend — 222 tests
 cd backend && pytest
 
 # Lint & format
@@ -360,7 +384,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete step-by-step guide this depl
 
 13 tables. See [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) for the full schema.
 
-Key design: SQLite in dev, PostgreSQL-compatible by design (UUIDs as `String(36)`, enums as `VARCHAR` with `native_enum=False`, no SQLite-specific SQL anywhere).
+Key design: PostgreSQL in production (Neon), SQLite in local dev — one shared schema, no dialect-specific SQL anywhere (UUIDs as `String(36)`, enums as `VARCHAR` with `native_enum=False`).
 
 ---
 
@@ -372,14 +396,19 @@ Key design: SQLite in dev, PostgreSQL-compatible by design (UUIDs as `String(36)
 - [x] CI/CD (GitHub Actions — backend + frontend)
 - [x] Production deployment (Vercel + Render + Neon PostgreSQL)
 - [x] Structured logging, security headers, trusted-host protection
+- [x] Premium landing page + split-screen auth redesign
+- [x] ML model trained and evaluated (RandomForestClassifier, 98.4% test accuracy)
 
 **Remaining:**
-- [ ] ML workout recommendation model (scikit-learn, Colab training pipeline — inference layer already wired, awaiting a trained artifact)
+- [ ] ML model integration into the backend (`MLRecommendationService`, behind a fallback to the rule engine — design complete, see [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md))
+- [ ] Fix the `bro_split` dead-code bug in the rule engine (discovered during ML dataset generation — see [ml/ML_TRAINING.md](ml/ML_TRAINING.md))
 - [ ] AI coach (LLM-backed chatbot)
 - [ ] Progress photo upload (S3/R2)
 - [ ] Email verification + password reset
 - [ ] Push notifications / workout reminders
 - [ ] Refresh-token rotation (currently a single 7-day access token)
+
+Full version history: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -395,6 +424,7 @@ A few non-obvious choices worth knowing:
 - **Cursor glow on `requestAnimationFrame`** — style mutations bypass React's render cycle entirely; stays at 60fps on heavy pages.
 - **`app.*` loggers have no handlers of their own** — they propagate to root, which has the one handler. Giving `app` its own handler too would either double-log every line or require `propagate=False`, which would silently break log capture in tests (`caplog` listens at root). See `backend/app/core/logging_config.py`.
 - **Custom `Exception` handler explicitly calls `logger.exception(...)`** — registering any handler for the bare `Exception` class replaces Starlette's default `ServerErrorMiddleware`, which is what normally logs unhandled tracebacks. Without the explicit call, production 500s would be completely silent in the logs.
+- **ML labels come from the real rule engine, not an approximation of it** — the training dataset was generated by directly calling `RuleBasedRecommendationEngine`, which is also what surfaced the `bro_split` dead-code bug. See [ml/ML_TRAINING.md](ml/ML_TRAINING.md).
 
 Full decision log: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/PROJECT_BIBLE.md](docs/PROJECT_BIBLE.md).
 
