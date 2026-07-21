@@ -65,11 +65,29 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
     # --- ML ----------------------------------------------------------------------
-    # Where the workout-recommendation model (trained offline in Colab) is
-    # loaded from. Defaults to the shared `ml/models/` folder at the repo root
-    # so the same exported artifact is the single source of truth for both the
-    # training notebook's output and the backend's input.
-    ML_MODEL_PATH: str = "../ml/models/workout_recommender.joblib"
+    # Path to the trained workout-recommendation model, exported from
+    # `ml/notebooks/train_model.ipynb` (see ml/ML_TRAINING.md). Model and
+    # preprocessor are saved as two separate .joblib files — see
+    # docs/ML_INTEGRATION.md for why they're loaded separately rather than
+    # bundled into one artifact.
+    ML_MODEL_PATH: str = "../ml/models/model.joblib"
+    ML_PREPROCESSOR_PATH: str = "../ml/models/preprocessor.joblib"
+
+    # Which recommendation engine actually serves POST /workouts/recommend:
+    #   "rule" — RuleBasedRecommendationEngine only (the original, always-on engine)
+    #   "ml"   — MLRecommendationService, which internally falls back to the
+    #            rule engine on any failure or low-confidence prediction
+    # See docs/ML_INTEGRATION.md for the full fallback design.
+    RECOMMENDATION_ENGINE: Literal["rule", "ml"] = "rule"
+
+    # Below this predict_proba() confidence, MLRecommendationService discards
+    # the ML prediction and defers to the rule engine instead — an uncertain
+    # ML guess is treated as no better than not having one. 0.6 is a
+    # deliberately conservative starting point (well above "just barely more
+    # likely than random" for a 5-class problem, where a coin-flip baseline
+    # is 0.2) — tune based on real production confidence distributions once
+    # there's traffic to observe.
+    ML_CONFIDENCE_THRESHOLD: float = 0.6
 
     @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", mode="before")
     @classmethod

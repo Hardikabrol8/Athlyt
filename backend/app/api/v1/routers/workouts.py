@@ -20,7 +20,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, RecommendationService
 from app.repositories import workout_plan_repository
 from app.schemas.recommendation import RecommendationResponse, WorkoutRecommendationRequest
 from app.schemas.workout import (
@@ -36,12 +36,10 @@ from app.schemas.workout_session import (
     WorkoutSessionResponse,
 )
 from app.services.workout_planner_service import WorkoutPlannerService
-from app.services.workout_recommendation_service import WorkoutRecommendationService
 from app.services.workout_tracking_service import WorkoutTrackingService
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
-_recommendation_service = WorkoutRecommendationService()
 _planner_service = WorkoutPlannerService()
 _tracking_service = WorkoutTrackingService()
 
@@ -53,10 +51,12 @@ _tracking_service = WorkoutTrackingService()
 
 @router.post("/recommend", response_model=RecommendationResponse)
 def recommend_workout_split(
-    data: WorkoutRecommendationRequest, current_user: CurrentUser
+    data: WorkoutRecommendationRequest,
+    current_user: CurrentUser,
+    recommendation_service: RecommendationService,
 ) -> RecommendationResponse:
     """Recommend a workout split for the current user without persisting anything."""
-    return _recommendation_service.recommend(current_user.profile, data.workout_days_per_week)
+    return recommendation_service.recommend(current_user.profile, data.workout_days_per_week)
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +73,7 @@ def generate_workout_plan(
     data: GenerateWorkoutRequest,
     current_user: CurrentUser,
     db: DbSession,
+    recommendation_service: RecommendationService,
 ) -> GeneratedWorkoutPlanResponse:
     """Full pipeline: recommend a split → build a weekly plan from DB exercises
     → deactivate any existing active plan → persist → return the complete plan.
@@ -80,7 +81,7 @@ def generate_workout_plan(
     Raises 422 if onboarding is incomplete (no profile / missing fields).
     """
     # Step 1: recommend a split (reuses the same service as /recommend)
-    recommendation = _recommendation_service.recommend(
+    recommendation = recommendation_service.recommend(
         current_user.profile, data.workout_days_per_week
     )
 

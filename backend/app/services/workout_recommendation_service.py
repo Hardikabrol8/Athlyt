@@ -136,6 +136,13 @@ class WorkoutRecommendationService:
             workout_days_per_week=workout_days_per_week,
             age=profile.age,
             gender=profile.gender,
+            # ML-only fields (Phase 2.3) — the rule engine ignores these
+            # entirely, same as it already ignores `gender`. Populated here
+            # so MLRecommendationService has what it needs without changing
+            # this method's return type or the RecommendationEngine protocol.
+            diet_preference=profile.diet_preference,
+            height_cm=profile.height_cm,
+            weight_kg=profile.weight_kg,
         )
 
         split = self._engine.recommend(recommendation_input)
