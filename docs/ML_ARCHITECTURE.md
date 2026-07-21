@@ -175,10 +175,10 @@ This section originally sketched `MLRecommendationService` as a planned interfac
 2. ~~Build the synthetic dataset + labeling script, train v1 in Colab~~ — done, see `ml/ML_TRAINING.md`
 3. ~~Implement `MLRecommendationService` + registry + inference, wire in behind a feature flag~~ — done, see [ML_INTEGRATION.md](ML_INTEGRATION.md)
 4. **Real outcome data**: once enough users have generated plans and either stuck with them or regenerated a different split, use `WorkoutSession` completion/streak data as a genuine outcome-based label — this is the point where ML can actually exceed the rule engine's ceiling, not just imitate it.
-5. **`model_predictions` logging table**: log every ML prediction (input features, output, model version, confidence) to the database — enables A/B comparison between model versions after the fact.
+5. **`model_predictions` logging table**: log every ML prediction (input features, output, model version, confidence) to the database — enables A/B comparison between model versions after the fact. Would also have caught the v1/rule-engine drift described in item 7 below automatically.
 6. **Extend the same pattern to other models**: calorie prediction, weight progress, adherence prediction — this project's `RecommendationEngine` Protocol pattern is a template for how each could get an ML-backed implementation behind the same kind of fallback-safe seam.
-7. **Fix the `bro_split` dead-code bug** in the rule engine itself, then retrain — see `ml/ML_TRAINING.md` §2.4/§7.
-8. **Re-bundle model + preprocessor** into a single `.joblib` — see §2.4/§2.5 above and `ML_INTEGRATION.md` §3.
+7. ~~**Fix the `bro_split` dead-code bug** in the rule engine itself, then retrain~~ — **done**. Fixed in `recommendation_rules.py`, dataset regenerated, model retrained as v2 — see `ml/models/MODEL_COMPARISON.md` for the complete before/after comparison (bro_split: 0% → 0.43% of the dataset, 96% precision / 100% recall on the retrained model; a 150-profile out-of-sample regression test shows 98% raw agreement between the rule engine and v2, 100% effective agreement once the production confidence threshold is accounted for).
+8. **Re-bundle model + preprocessor** into a single `.joblib` — see §2.4/§2.5 above and `ML_INTEGRATION.md` §3. Still not done as of v2.
 
 ---
 

@@ -1,6 +1,8 @@
-# Athlyt — ML Training Documentation (Phase 2.2)
+# Athlyt — ML Training Documentation (Phase 2.2, updated for the v2 retrain)
 
-**Status:** Dataset generated, model trained and evaluated. **Not yet integrated into the backend** — the rule engine remains the only active recommendation engine in production. Integration is a separate future phase (see `docs/ML_ARCHITECTURE.md` §6).
+**Model version: v2** (retrained 2026-07-21, after the `bro_split` rule-engine fix documented in §2.4 below). This document describes the original v1 training process in full — everything in §2-§6 is still accurate for *how* training works, since the pipeline was reused unchanged for v2. Where a specific number or claim changed for v2, it's called out explicitly inline. See `ml/models/MODEL_COMPARISON.md` for the complete v1-vs-v2 comparison and `ml/models/evaluation_report.md` for v2's evaluation (v1's original report is preserved at `ml/models/evaluation_report_v1_archive.md`).
+
+**Status:** Dataset generated, model trained, evaluated, **and integrated into the backend** behind `RECOMMENDATION_ENGINE=ml` (see `docs/ML_INTEGRATION.md`) — defaults to `rule` in production. This is v2 of the model, retrained after a real bug fix in the rule engine (see §2.4).
 
 ---
 
@@ -8,13 +10,16 @@
 
 | Artifact | Location | Description |
 |---|---|---|
-| Dataset generator | `ml/notebooks/generate_dataset.py` | Standalone script, importable and runnable independently of the notebook |
-| Training notebook | `ml/notebooks/train_model.ipynb` | Full pipeline, Colab-ready, executed end-to-end with zero errors during this phase |
-| Dataset | `ml/data/dataset.csv` | 100,000 synthetic users, labeled by the real rule engine |
-| Trained model | `ml/models/model.joblib` | `RandomForestClassifier`, 74.5MB |
+| Dataset generator | `ml/notebooks/generate_dataset.py` | Standalone script, importable and runnable independently of the notebook — **unmodified** between v1 and v2; the regenerated dataset differs only because the rule engine it calls changed |
+| Training notebook | `ml/notebooks/train_model.ipynb` | Full pipeline, Colab-ready, executed end-to-end with zero errors |
+| Dataset | `ml/data/dataset.csv` | 100,000 synthetic users, labeled by the real rule engine (v2: now includes `bro_split`, see §2.4) |
+| Class distribution comparison | `ml/data/class_distribution_comparison_v1_vs_v2.csv` | Exact before/after row counts per class |
+| Trained model | `ml/models/model.joblib` | `RandomForestClassifier`, 69.5MB (v2) |
 | Preprocessor | `ml/models/preprocessor.joblib` | Fitted `ColumnTransformer` (one-hot encoding) |
-| Metadata | `ml/models/metadata.json` | Hyperparameters, metrics, feature list, training timestamp |
-| Evaluation report | `ml/models/evaluation_report.md` | Full results writeup with real numbers |
+| Metadata | `ml/models/metadata.json` | Hyperparameters, metrics, feature list, training timestamp, `model_version: "v2"` |
+| Evaluation report | `ml/models/evaluation_report.md` | v2 results writeup with real numbers (v1's original preserved at `evaluation_report_v1_archive.md`) |
+| Model comparison | `ml/models/MODEL_COMPARISON.md` | Full v1-vs-v2 comparison: dataset, model metrics, per-class changes, rule-vs-ML regression test |
+| Regression test results | `ml/models/regression_test_summary_v2.json`, `regression_test_disagreements_v2.csv` | 150-profile out-of-sample rule-vs-ML agreement check |
 | This document | `ml/ML_TRAINING.md` | Narrative explanation of every decision |
 
 ---
@@ -73,6 +78,8 @@ While validating the dataset's target distribution, a real problem was found —
 **How it was handled in this phase:** per the explicit scope of this phase ("do not modify the backend"), the rule engine was left untouched. The dataset faithfully reflects what the real system actually does — training on a fabricated `bro_split` label would mean training the model on data the real app would never produce, defeating the point of imitating it. The model was trained on the **5 classes that genuinely occur**.
 
 **Recommended next step (separate from ML work):** fix the rule engine's tie-breaking or `bro_split`'s scoring so it becomes reachable, then regenerate the dataset and retrain. A minimal fix would be adjusting `bro_split`'s goal-scores upward by 1-2 points for `muscle_gain` specifically (its most natural use case), or changing tie-break order. This is a bug fix independent of any ML work and worth raising with whoever owns `recommendation_rules.py`.
+
+> **Update (2026-07-21):** this was fixed. `bro_split`'s advanced-experience score was raised from `10` to `12` in `recommendation_rules.py` — verified mathematically and with dedicated regression tests that `bro_split` now wins at its real-world niche (advanced experience, 5 days/week, full gym) across every fitness goal, without changing any other split's behavior. The dataset above was then regenerated and the model retrained — see `ml/models/MODEL_COMPARISON.md` for the complete before/after comparison. **This section is preserved as-written above** (the original discovery narrative) rather than rewritten, since it's the accurate record of what was found and why, at the time it was found.
 
 ---
 
@@ -160,9 +167,10 @@ See `ml/models/evaluation_report.md` for the complete writeup with the full conf
 
 ## 7. Future improvements
 
-1. ~~**Fix the `bro_split` dead-code bug** in the rule engine itself (§2.4)~~ — **done**, in `recommendation_rules.py` (a single scoring value was raised so `bro_split` genuinely wins at its real-world niche: advanced experience, 5 days/week, full gym, across every fitness goal — verified with dedicated regression tests in `tests/test_workout_recommendation_service.py`). **Not yet done:** regenerating this dataset and retraining against the fixed rule engine — this model was trained *before* the fix, so it still never predicts `bro_split`. That's the next real action item, not this one.
+1. ~~**Fix the `bro_split` dead-code bug** in the rule engine itself (§2.4)~~ — **done**, in `recommendation_rules.py` (a single scoring value was raised so `bro_split` genuinely wins at its real-world niche: advanced experience, 5 days/week, full gym, across every fitness goal — verified with dedicated regression tests in `tests/test_workout_recommendation_service.py`). ~~**Not yet done:** regenerating this dataset and retraining against the fixed rule engine~~ — **also done**: this is v2, trained on the regenerated dataset. See `ml/models/MODEL_COMPARISON.md` for the complete before/after comparison.
 2. **Correlate more features during generation** — currently only weight is conditioned on height/BMI; a more sophisticated generator could also correlate `workout_experience` with `age` (more experienced users skew slightly older in reality) and `fitness_goal` with `activity_level`.
-3. **Drop or de-weight near-zero-importance features** (`diet_preference`, `gender`, `bmi_category`) in a v2 model — empirically justified by this phase's own feature importance results, would slightly reduce encoded dimensionality and model size with likely negligible accuracy impact.
-4. **Re-bundle model + preprocessor together** before backend integration (§6).
-5. **The real long-term goal, per `docs/ML_ARCHITECTURE.md` §7:** retrain on real user behavioral outcome data (did a user actually stick with their recommended plan, based on `WorkoutSession` completion/streak data) once enough of it accumulates — this is the only way a future model can genuinely exceed the rule engine's own accuracy ceiling, rather than just imitating it as this first model does.
+3. **Drop or de-weight near-zero-importance features** (`diet_preference`, `gender`, `bmi_category`) in a future retrain — empirically justified by both v1's and v2's feature importance results (consistently near the bottom in both), would slightly reduce encoded dimensionality and model size with likely negligible accuracy impact.
+4. **Re-bundle model + preprocessor together** (see `docs/ML_INTEGRATION.md` §3 — noted there as not yet done).
+5. **The real long-term goal, per `docs/ML_ARCHITECTURE.md` §7:** retrain on real user behavioral outcome data (did a user actually stick with their recommended plan, based on `WorkoutSession` completion/streak data) once enough of it accumulates — this is the only way a future model can genuinely exceed the rule engine's own accuracy ceiling, rather than just imitating it as this model still does.
 6. **Try XGBoost/LightGBM once real outcome data exists** — `docs/ML_ARCHITECTURE.md` §4.2 explicitly deferred this comparison until the labeling problem changes from "imitate the rule engine" to "predict a real, independent outcome," where a stronger algorithm's edge on complex feature interactions could plausibly matter.
+7. **Automate rule-engine/ML-model drift detection** — this retrain was only triggered because someone was actively aware both the rule engine and the model existed and needed to stay in sync. A production `model_predictions` log (per `docs/ML_ARCHITECTURE.md` §7) recording both engines' outputs side-by-side would catch this kind of drift automatically in the future.

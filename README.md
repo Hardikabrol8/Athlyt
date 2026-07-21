@@ -104,7 +104,7 @@ A `RandomForestClassifier` has been trained to predict the same workout-split re
 
 **A genuine bug was found and fixed along the way:** one of the six workout splits (`bro_split`) could never actually be recommended by the rule engine, under any input — verified exhaustively while building the ML training dataset, then fixed in `recommendation_rules.py` (a single scoring value was too low to ever overcome `push_pull_legs`'s advantage). See [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the discovery and root-cause analysis.
 
-> **Known divergence:** the trained ML model (above) was trained on the rule engine's output *before* this fix — it still never predicts `bro_split`, since that label never appeared in its training data. The rule engine and the ML model will disagree on `bro_split`-eligible profiles (advanced, 5 days/week, full gym) until the dataset is regenerated and the model retrained against the fixed rule engine. Not urgent while `RECOMMENDATION_ENGINE` defaults to `rule` in production, but worth knowing before switching the default.
+> **Retrained (v2):** the model was originally trained before the `bro_split` fix and never predicted it. It has since been retrained on a freshly regenerated dataset against the fixed rule engine — `bro_split` now makes up 0.43% of the training data and the retrained model correctly predicts it with 96% precision / 100% recall on held-out test data. A 150-profile out-of-sample regression test comparing the rule engine directly against the retrained model shows 98% raw agreement; the only 3 disagreements all fell below the production confidence threshold, meaning the deployed system's effective agreement (accounting for the automatic fallback) is 100%. Full comparison: [ml/models/MODEL_COMPARISON.md](ml/models/MODEL_COMPARISON.md).
 
 **Current status:** trained, evaluated, **and now integrated into the backend** as an optional, fallback-safe engine (`MLRecommendationService`) — available behind `RECOMMENDATION_ENGINE=ml`, defaulting to `rule` in production until there's real confidence-distribution data to tune against. Every failure mode (missing model, low confidence, corrupted file, invalid input) falls back to the original rule engine automatically — the API never returns an error because the ML model failed. See [docs/ML_INTEGRATION.md](docs/ML_INTEGRATION.md) for the full integration design, [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) for the original architecture plan, and [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the training pipeline, dataset generation, and evaluation writeup.
 
@@ -406,9 +406,9 @@ Key design: PostgreSQL in production (Neon), SQLite in local dev — one shared 
 - [x] ML model trained and evaluated (RandomForestClassifier, 98.4% test accuracy)
 - [x] ML model integrated into the backend behind `RECOMMENDATION_ENGINE=ml`, with automatic fallback to the rule engine
 - [x] Fixed the `bro_split` dead-code bug in the rule engine (discovered during ML dataset generation — see [ml/ML_TRAINING.md](ml/ML_TRAINING.md))
+- [x] Regenerated the ML training dataset and retrained (v2) against the fixed rule engine — model now correctly predicts `bro_split` (96% precision, 100% recall); see [ml/models/MODEL_COMPARISON.md](ml/models/MODEL_COMPARISON.md)
 
 **Remaining:**
-- [ ] Regenerate the ML training dataset and retrain against the now-fixed rule engine, so the model can predict `bro_split` too (currently a known divergence — see the Machine Learning section above)
 - [ ] Switch `RECOMMENDATION_ENGINE` default to `ml` in production, once confidence-threshold tuning has real traffic to observe
 - [ ] Re-bundle `model.joblib` + `preprocessor.joblib` into a single artifact (see [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) §5.6)
 - [ ] AI coach (LLM-backed chatbot)
