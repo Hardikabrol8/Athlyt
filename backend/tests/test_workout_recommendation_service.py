@@ -160,3 +160,60 @@ def test_a_substituted_engine_changes_the_outcome(service: WorkoutRecommendation
     result = custom_service.recommend(profile, workout_days_per_week=3)
 
     assert result.split_name == "Bro Split"
+
+
+def test_bro_split_is_genuinely_reachable_for_advanced_users_at_5_days(
+    service: WorkoutRecommendationService,
+) -> None:
+    """Regression test for a real bug found while building the ML training
+    dataset (see ml/ML_TRAINING.md §2.4): `bro_split` could never be
+    recommended under ANY input, because push_pull_legs scored equal-or-
+    higher on every dimension the rule engine evaluated, and ties always
+    resolved to push_pull_legs (defined first in WORKOUT_SPLITS). Fixed in
+    recommendation_rules.py by raising bro_split's advanced-experience score
+    from 10 to 12 — this test locks in that bro_split is now reachable at
+    its classic real-world niche (advanced lifter, 5 days/week, full gym),
+    across every fitness goal, so this can't silently regress back to
+    unreachable."""
+    for goal in (
+        FitnessGoal.muscle_gain,
+        FitnessGoal.weight_loss,
+        FitnessGoal.maintenance,
+        FitnessGoal.general_fitness,
+    ):
+        profile = _make_profile(
+            fitness_goal=goal,
+            workout_experience=WorkoutExperience.advanced,
+            equipment_available=["full_gym"],
+        )
+        result = service.recommend(profile, workout_days_per_week=5)
+        assert result.split_name == "Bro Split", f"Expected Bro Split for goal={goal}"
+
+
+def test_push_pull_legs_still_wins_at_6_days_even_for_advanced_users(
+    service: WorkoutRecommendationService,
+) -> None:
+    """The bro_split fix (above) must not flip the correct outcome at 6
+    days, where cycling a 3-day push/pull/legs rotation twice is the more
+    natural fit than a single-muscle-per-day bodybuilding split."""
+    profile = _make_profile(
+        fitness_goal=FitnessGoal.muscle_gain,
+        workout_experience=WorkoutExperience.advanced,
+        equipment_available=["full_gym"],
+    )
+    result = service.recommend(profile, workout_days_per_week=6)
+    assert result.split_name == "Push Pull Legs"
+
+
+def test_bro_split_still_loses_to_push_pull_legs_for_intermediate_users(
+    service: WorkoutRecommendationService,
+) -> None:
+    """The fix only raised bro_split's *advanced*-experience score —
+    intermediate users should be completely unaffected."""
+    profile = _make_profile(
+        fitness_goal=FitnessGoal.muscle_gain,
+        workout_experience=WorkoutExperience.intermediate,
+        equipment_available=["full_gym"],
+    )
+    result = service.recommend(profile, workout_days_per_week=5)
+    assert result.split_name == "Push Pull Legs"

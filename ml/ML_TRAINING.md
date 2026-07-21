@@ -160,7 +160,7 @@ See `ml/models/evaluation_report.md` for the complete writeup with the full conf
 
 ## 7. Future improvements
 
-1. **Fix the `bro_split` dead-code bug** in the rule engine itself (§2.4) — independent of ML work, but blocks this model from ever being a complete 6-class classifier until it's fixed and the dataset regenerated.
+1. ~~**Fix the `bro_split` dead-code bug** in the rule engine itself (§2.4)~~ — **done**, in `recommendation_rules.py` (a single scoring value was raised so `bro_split` genuinely wins at its real-world niche: advanced experience, 5 days/week, full gym, across every fitness goal — verified with dedicated regression tests in `tests/test_workout_recommendation_service.py`). **Not yet done:** regenerating this dataset and retraining against the fixed rule engine — this model was trained *before* the fix, so it still never predicts `bro_split`. That's the next real action item, not this one.
 2. **Correlate more features during generation** — currently only weight is conditioned on height/BMI; a more sophisticated generator could also correlate `workout_experience` with `age` (more experienced users skew slightly older in reality) and `fitness_goal` with `activity_level`.
 3. **Drop or de-weight near-zero-importance features** (`diet_preference`, `gender`, `bmi_category`) in a v2 model — empirically justified by this phase's own feature importance results, would slightly reduce encoded dimensionality and model size with likely negligible accuracy impact.
 4. **Re-bundle model + preprocessor together** before backend integration (§6).

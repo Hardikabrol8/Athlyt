@@ -139,7 +139,24 @@ _EXPERIENCE_SCORES: dict[WorkoutExperience, dict[str, float]] = {
         "home_bodyweight": 5,
     },
     WorkoutExperience.advanced: {
-        "bro_split": 10,
+        # bro_split and upper_lower_strength were both 10 here originally —
+        # a +1 edge over push_pull_legs (9) that turned out to never be
+        # enough: push_pull_legs's goal score is 1-2 points higher than
+        # bro_split's in every single FitnessGoal (see _GOAL_SCORES above),
+        # and push_pull_legs matches bro_split's day-fit score at bro_split's
+        # only ideal day count (5). The result was that bro_split could
+        # never mathematically outscore push_pull_legs under any input —
+        # verified exhaustively while building the ML training dataset (see
+        # ml/ML_TRAINING.md §2.4, which documents the bug this fixes).
+        #
+        # Raised to 12 (a +3 edge, not +1) specifically so bro_split wins at
+        # its classic real-world niche — an advanced lifter training 5 days
+        # a week with full gym access — across every fitness goal, while
+        # changing nothing else: push_pull_legs still correctly wins at 6
+        # days (where 2x through a 3-day PPL cycle is the more natural fit
+        # than a bodybuilding split), and every beginner/intermediate score
+        # is untouched.
+        "bro_split": 12,
         "upper_lower_strength": 10,
         "push_pull_legs": 9,
         "upper_lower": 6,

@@ -10,7 +10,7 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 
 [![Backend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml)
 [![Frontend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml)
-[![Backend Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen)](backend/tests)
+[![Backend Tests](https://img.shields.io/badge/tests-239%20passing-brightgreen)](backend/tests)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](backend/pyproject.toml)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](frontend/package.json)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -71,7 +71,7 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 | **Backend** | FastAPI, SQLAlchemy 2.0, Pydantic v2, PyJWT, bcrypt |
 | **Database** | SQLite (dev) / PostgreSQL via Neon (prod) |
 | **ML** | scikit-learn (RandomForestClassifier), trained in Colab, loaded via joblib |
-| **Testing** | pytest (236 tests), ruff, black |
+| **Testing** | pytest (239 tests), ruff, black |
 | **CI/CD** | GitHub Actions (backend + frontend, on every push/PR) |
 | **Containerization** | Docker + Docker Compose (backend, frontend, PostgreSQL) |
 
@@ -102,7 +102,9 @@ A `RandomForestClassifier` has been trained to predict the same workout-split re
 | Dataset size | 100,000 synthetic profiles |
 | Model size | 71 MB (Git LFS) |
 
-**A genuine bug was discovered along the way:** one of the six workout splits (`bro_split`) can never actually be recommended by the current rule engine, under any input — verified exhaustively. See [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the full root-cause explanation.
+**A genuine bug was found and fixed along the way:** one of the six workout splits (`bro_split`) could never actually be recommended by the rule engine, under any input — verified exhaustively while building the ML training dataset, then fixed in `recommendation_rules.py` (a single scoring value was too low to ever overcome `push_pull_legs`'s advantage). See [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the discovery and root-cause analysis.
+
+> **Known divergence:** the trained ML model (above) was trained on the rule engine's output *before* this fix — it still never predicts `bro_split`, since that label never appeared in its training data. The rule engine and the ML model will disagree on `bro_split`-eligible profiles (advanced, 5 days/week, full gym) until the dataset is regenerated and the model retrained against the fixed rule engine. Not urgent while `RECOMMENDATION_ENGINE` defaults to `rule` in production, but worth knowing before switching the default.
 
 **Current status:** trained, evaluated, **and now integrated into the backend** as an optional, fallback-safe engine (`MLRecommendationService`) — available behind `RECOMMENDATION_ENGINE=ml`, defaulting to `rule` in production until there's real confidence-distribution data to tune against. Every failure mode (missing model, low confidence, corrupted file, invalid input) falls back to the original rule engine automatically — the API never returns an error because the ML model failed. See [docs/ML_INTEGRATION.md](docs/ML_INTEGRATION.md) for the full integration design, [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) for the original architecture plan, and [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the training pipeline, dataset generation, and evaluation writeup.
 
@@ -286,7 +288,7 @@ athlyt/
 │   │   ├── db/                — Engine, session, seed data
 │   │   └── ml/                — Inference layer (planned integration point)
 │   ├── alembic/               — Database migrations
-│   └── tests/                 — 236 pytest tests
+│   └── tests/                 — 239 pytest tests
 ├── frontend/
 │   ├── app/                   — Next.js App Router pages
 │   ├── components/            — UI components (shared, landing, auth, domain)
@@ -338,7 +340,7 @@ Health:      GET  /health, /health/detailed
 ## Testing
 
 ```bash
-# Backend — 236 tests
+# Backend — 239 tests
 cd backend && pytest
 
 # Lint & format
@@ -403,10 +405,11 @@ Key design: PostgreSQL in production (Neon), SQLite in local dev — one shared 
 - [x] Premium landing page + split-screen auth redesign
 - [x] ML model trained and evaluated (RandomForestClassifier, 98.4% test accuracy)
 - [x] ML model integrated into the backend behind `RECOMMENDATION_ENGINE=ml`, with automatic fallback to the rule engine
+- [x] Fixed the `bro_split` dead-code bug in the rule engine (discovered during ML dataset generation — see [ml/ML_TRAINING.md](ml/ML_TRAINING.md))
 
 **Remaining:**
+- [ ] Regenerate the ML training dataset and retrain against the now-fixed rule engine, so the model can predict `bro_split` too (currently a known divergence — see the Machine Learning section above)
 - [ ] Switch `RECOMMENDATION_ENGINE` default to `ml` in production, once confidence-threshold tuning has real traffic to observe
-- [ ] Fix the `bro_split` dead-code bug in the rule engine (discovered during ML dataset generation — see [ml/ML_TRAINING.md](ml/ML_TRAINING.md))
 - [ ] Re-bundle `model.joblib` + `preprocessor.joblib` into a single artifact (see [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) §5.6)
 - [ ] AI coach (LLM-backed chatbot)
 - [ ] Progress photo upload (S3/R2)
