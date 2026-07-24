@@ -6,6 +6,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 
 import { SectionHeader } from "@/components/shared/section-header";
+import { AIRecommendationCard } from "@/components/workouts/ai-recommendation-card";
+import { AIInsightsSection } from "@/components/workouts/ai-insights-section";
 import { EmptyWorkoutState } from "@/components/workouts/empty-workout-state";
 import { ExerciseCard } from "@/components/workouts/exercise-card";
 import { TodaysWorkoutCard } from "@/components/workouts/todays-workout-card";
@@ -131,6 +133,20 @@ export default function DashboardPage() {
         <WelcomeCardSkeleton />
       ) : (
         <WelcomeCard profile={profile} metrics={metrics} plan={planNotFound ? null : (plan ?? null)} />
+      )}
+
+      {/* AI Recommendation reveal — only present right after a fresh
+          generate call on THIS page (from generateWorkout's own mutation
+          result, not persisted/re-fetched). This dashboard has its own,
+          independent "Generate Workout" entry point (EmptyWorkoutState
+          below) separate from the one on /workouts — both needed the same
+          reveal wired in, since a user can generate their very first plan
+          from either page. */}
+      {generateWorkout.data && (
+        <>
+          <AIRecommendationCard plan={generateWorkout.data} />
+          <AIInsightsSection plan={generateWorkout.data} />
+        </>
       )}
 
       <AnimatePresence mode="wait">
