@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import FitnessGoal, WorkoutExperience
 from app.schemas.exercise import ExerciseResponse
+from app.schemas.recommendation import RecommendationExplanation
 
 
 # --- WorkoutExercise -----------------------------------------------------------
@@ -133,3 +134,17 @@ class GeneratedWorkoutPlanResponse(BaseModel):
     split_name: str
     difficulty: str
     estimated_duration_minutes: int
+
+    # --- Added for the premium AI recommendation UI. Same fields, same
+    # meaning, as RecommendationResponse (schemas/recommendation.py) — this
+    # is the endpoint the frontend actually calls (POST /workouts/generate),
+    # so the same engine/confidence/model-version/explanation metadata is
+    # threaded through here too, copied directly from the RecommendationResponse
+    # WorkoutPlannerService.generate_and_save() already receives. All
+    # additive, all defaulted — existing clients reading only the fields
+    # above are unaffected. ---
+    engine: str = "rule"
+    confidence: float | None = None
+    latency_ms: float | None = None
+    model_version: str | None = None
+    explanation: RecommendationExplanation | None = None

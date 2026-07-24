@@ -132,10 +132,34 @@ export interface WorkoutPlanResponse {
 }
 
 // The /generate response adds computed fields on top of WorkoutPlanResponse.
+/**
+ * The profile inputs a recommendation was actually based on — mirrors the
+ * backend's `RecommendationExplanation` (schemas/recommendation.py) exactly.
+ */
+export interface RecommendationExplanation {
+  goal: string;
+  experience: string;
+  days_per_week: number;
+  equipment: string;
+  gender: string;
+  age: number;
+}
+
 export interface GeneratedWorkoutPlanResponse extends WorkoutPlanResponse {
   split_name: string;
   difficulty: string;
   estimated_duration_minutes: number;
+  // Added for the premium AI recommendation UI — see
+  // backend/app/schemas/workout.py's GeneratedWorkoutPlanResponse for the
+  // exact same fields on the Python side. `engine` defaults to "rule" on
+  // the backend, but is always present; the others are `null` whenever
+  // `engine === "rule"` (no meaningful confidence/model version for a
+  // rule-based decision).
+  engine: "ml" | "rule";
+  confidence: number | null;
+  latency_ms: number | null;
+  model_version: string | null;
+  explanation: RecommendationExplanation | null;
 }
 
 export interface GenerateWorkoutRequest {

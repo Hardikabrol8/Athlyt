@@ -20,6 +20,8 @@ import { TodaysWorkoutCard } from "@/components/workouts/todays-workout-card";
 import { EmptyWorkoutState } from "@/components/workouts/empty-workout-state";
 import { TodaysWorkoutCardSkeleton } from "@/components/workouts/workout-skeletons";
 import { WorkoutErrorState } from "@/components/workouts/workout-error-state";
+import { AIRecommendationCard } from "@/components/workouts/ai-recommendation-card";
+import { AIInsightsSection } from "@/components/workouts/ai-insights-section";
 import type { WorkoutSessionResponse } from "@/types/user";
 
 const container: Variants = {
@@ -88,6 +90,21 @@ export default function WorkoutsPage() {
           </>
         )}
       </motion.div>
+
+      {/* AI Recommendation reveal — only present right after a fresh
+          POST /workouts/generate in this session (from the mutation's own
+          result, not persisted/re-fetched on reload). Existing sections
+          below are completely unmodified. */}
+      {generateMutation.data && (
+        <>
+          <motion.div variants={item}>
+            <AIRecommendationCard plan={generateMutation.data} />
+          </motion.div>
+          <motion.div variants={item}>
+            <AIInsightsSection plan={generateMutation.data} />
+          </motion.div>
+        </>
+      )}
 
       {/* Today's workout */}
       <motion.div variants={item}>

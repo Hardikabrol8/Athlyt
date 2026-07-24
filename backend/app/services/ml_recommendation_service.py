@@ -21,7 +21,7 @@ from app.ml.feature_builder import build_feature_row
 from app.ml.inference.workout_recommender import predict
 from app.ml.registry import ModelLoadError, get_model_and_preprocessor, get_model_version
 from app.services.recommendation_engine import RuleBasedRecommendationEngine
-from app.services.recommendation_types import RecommendationInput
+from app.services.recommendation_types import EngineRecommendation, RecommendationInput
 from app.services.workout_splits import SPLIT_BY_KEY, WorkoutSplitDefinition
 
 logger = get_logger(__name__)
@@ -33,6 +33,13 @@ class MLRecommendationService:
     so `WorkoutRecommendationService` (and everything above it: routers,
     schemas, the Workout Planner, the frontend) needs zero changes to use
     this instead. See `docs/ML_INTEGRATION.md` §1 for the full call chain.
+
+    `recommend()` itself is unchanged from Phase 2.3 — it's now a one-line
+    wrapper around `recommend_with_metadata()` (added for the premium AI
+    recommendation UI), which contains the exact same logic, exact same log
+    messages, and exact same fallback behavior as before. Every existing
+    caller and test that only wants the split (not the engine/confidence/
+    latency detail) keeps working completely unchanged.
     """
 
     def __init__(self) -> None:
@@ -42,6 +49,11 @@ class MLRecommendationService:
         self._rule_engine = RuleBasedRecommendationEngine()
 
     def recommend(self, recommendation_input: RecommendationInput) -> WorkoutSplitDefinition:
+        return self.recommend_with_metadata(recommendation_input).split
+
+    def recommend_with_metadata(
+        self, recommendation_input: RecommendationInput
+    ) -> EngineRecommendation:
         start = time.perf_counter()
 
         try:
@@ -96,20 +108,26 @@ class MLRecommendationService:
             get_model_version() or "unknown",
             latency_ms,
         )
-        return SPLIT_BY_KEY[split_key]
+        return EngineRecommendation(
+            split=SPLIT_BY_KEY[split_key],
+            engine="ml",
+            confidence=confidence,
+            latency_ms=latency_ms,
+            model_version=get_model_version(),
+        )
 
     def _predict(self, recommendation_input: RecommendationInput) -> tuple[str, float]:
         """Raises on any failure — model not loaded, preprocessing error,
         or a genuine prediction error. Never called directly by anything
-        outside `recommend()`, which is responsible for catching whatever
-        this raises."""
+        outside `recommend_with_metadata()`, which is responsible for
+        catching whatever this raises."""
         model, preprocessor = get_model_and_preprocessor()  # raises ModelLoadError
         features = build_feature_row(recommendation_input)  # raises ValueError on bad input
         result = predict(model, preprocessor, features)
         return result.split_key, result.confidence
 
-    def _fallback(self, recommendation_input: RecommendationInput) -> WorkoutSplitDefinition:
-        return self._rule_engine.recommend(recommendation_input)
+    def _fallback(self, recommendation_input: RecommendationInput) -> EngineRecommendation:
+        return self._rule_engine.recommend_with_metadata(recommendation_input)
 
 
 __all__ = ["MLRecommendationService", "ModelLoadError"]

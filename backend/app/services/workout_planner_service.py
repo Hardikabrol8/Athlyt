@@ -505,4 +505,13 @@ class WorkoutPlannerService:
             split_name=split_name,
             difficulty=recommendation.difficulty,
             estimated_duration_minutes=estimated_duration,
+            # Carried straight through from the RecommendationResponse this
+            # method already receives — see workout_recommendation_service.py
+            # for where these actually get computed (engine/confidence/
+            # latency_ms/model_version/explanation).
+            engine=recommendation.engine,
+            confidence=recommendation.confidence,
+            latency_ms=recommendation.latency_ms,
+            model_version=recommendation.model_version,
+            explanation=recommendation.explanation,
         )

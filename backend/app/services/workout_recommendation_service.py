@@ -4,13 +4,14 @@ an actual day-by-day plan (that's the Workout Planner, a later milestone) —
 this is a single, stateless, read-only decision.
 """
 
+import time
+
 from app.core.exceptions import ValidationError
 from app.models.enums import Equipment, FitnessGoal, WorkoutExperience
 from app.models.profile import Profile
-from app.schemas.recommendation import RecommendationResponse
+from app.schemas.recommendation import RecommendationExplanation, RecommendationResponse
 from app.services.recommendation_engine import RecommendationEngine, RuleBasedRecommendationEngine
-from app.services.recommendation_types import RecommendationInput
-from app.services.workout_splits import WorkoutSplitDefinition
+from app.services.recommendation_types import EngineRecommendation, RecommendationInput
 
 _GOAL_LABELS: dict[FitnessGoal, str] = {
     FitnessGoal.weight_loss: "Weight Loss",
@@ -94,15 +95,43 @@ def _build_reason(recommendation_input: RecommendationInput) -> str:
     )
 
 
+def _build_explanation(recommendation_input: RecommendationInput) -> RecommendationExplanation:
+    """The profile inputs behind a recommendation, as human-readable
+    strings — reuses the exact same label dicts and equipment-description
+    logic `_build_reason()` already uses, so the "Why this plan?" prose and
+    these structured fields (used for chips + AI Insights) never disagree
+    with each other about how to describe the same profile."""
+    goal_label = _GOAL_LABELS.get(
+        recommendation_input.fitness_goal, recommendation_input.fitness_goal.value
+    )
+    experience_label = _EXPERIENCE_LABELS.get(
+        recommendation_input.workout_experience, recommendation_input.workout_experience.value
+    )
+    return RecommendationExplanation(
+        goal=goal_label,
+        experience=experience_label,
+        days_per_week=recommendation_input.workout_days_per_week,
+        equipment=_describe_equipment(recommendation_input.equipment_available),
+        gender=recommendation_input.gender.value.capitalize(),
+        age=recommendation_input.age,
+    )
+
+
 def _build_response(
-    recommendation_input: RecommendationInput, split: WorkoutSplitDefinition
+    recommendation_input: RecommendationInput, engine_recommendation: EngineRecommendation
 ) -> RecommendationResponse:
+    split = engine_recommendation.split
     return RecommendationResponse(
         title=_derive_title(recommendation_input.fitness_goal, split.key),
         split_name=split.split_name,
         workout_days=recommendation_input.workout_days_per_week,
         difficulty=split.difficulty.value.capitalize(),
         reason=_build_reason(recommendation_input),
+        engine=engine_recommendation.engine,
+        confidence=engine_recommendation.confidence,
+        latency_ms=round(engine_recommendation.latency_ms, 1),
+        model_version=engine_recommendation.model_version,
+        explanation=_build_explanation(recommendation_input),
     )
 
 
@@ -145,5 +174,29 @@ class WorkoutRecommendationService:
             weight_kg=profile.weight_kg,
         )
 
+        engine_recommendation = self._recommend_with_metadata(recommendation_input)
+        return _build_response(recommendation_input, engine_recommendation)
+
+    def _recommend_with_metadata(
+        self, recommendation_input: RecommendationInput
+    ) -> EngineRecommendation:
+        """Prefers the engine's `recommend_with_metadata()` (both
+        `RuleBasedRecommendationEngine` and `MLRecommendationService`
+        implement it — see recommendation_engine.py and
+        ml_recommendation_service.py). Falls back to calling the original
+        `recommend()` directly, wrapped in a synthesized "rule" metadata
+        result, for any engine that only implements the base
+        `RecommendationEngine` protocol (e.g. a test double substituted via
+        the constructor) — this is what keeps `WorkoutRecommendationService`
+        usable with *any* object shaped like the original protocol, not
+        just the two concrete engines this project ships.
+        """
+        if hasattr(self._engine, "recommend_with_metadata"):
+            return self._engine.recommend_with_metadata(recommendation_input)  # type: ignore[attr-defined]
+
+        start = time.perf_counter()
         split = self._engine.recommend(recommendation_input)
-        return _build_response(recommendation_input, split)
+        latency_ms = (time.perf_counter() - start) * 1000
+        return EngineRecommendation(
+            split=split, engine="rule", confidence=None, latency_ms=latency_ms, model_version=None
+        )

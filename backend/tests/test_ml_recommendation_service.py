@@ -269,3 +269,57 @@ class TestUnrecognisedPrediction:
         assert result.key != "not_a_real_split_key"
 
         get_settings.cache_clear()
+
+
+class TestRecommendWithMetadata:
+    """Tests for `recommend_with_metadata()` — added for the premium AI
+    recommendation UI. `recommend()` itself is unchanged (see the other
+    test classes above); these specifically check the richer return type."""
+
+    def test_successful_prediction_reports_engine_ml_and_real_confidence(self, working_model):
+        service = MLRecommendationService()
+        result = service.recommend_with_metadata(_make_input())
+
+        assert result.engine == "ml"
+        assert result.confidence is not None
+        assert 0.0 <= result.confidence <= 1.0
+        assert result.latency_ms >= 0
+
+    def test_recommend_and_recommend_with_metadata_agree_on_the_split(self, working_model):
+        """`.recommend()` must still return exactly `.recommend_with_metadata().split`
+        — this is what keeps `.recommend()` unchanged from Phase 2.3, not a
+        second, potentially-diverging implementation."""
+        service = MLRecommendationService()
+        recommendation_input = _make_input()
+
+        # Same input, same deterministic model -> same result either way.
+        split_via_recommend = service.recommend(recommendation_input)
+        result_via_metadata = service.recommend_with_metadata(recommendation_input)
+
+        assert split_via_recommend.key == result_via_metadata.split.key
+
+    def test_fallback_reports_engine_rule_with_no_confidence(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ML_MODEL_PATH", str(tmp_path / "missing.joblib"))
+        monkeypatch.setenv("ML_PREPROCESSOR_PATH", str(tmp_path / "missing2.joblib"))
+        get_settings.cache_clear()
+
+        service = MLRecommendationService()
+        result = service.recommend_with_metadata(_make_input())
+
+        assert result.engine == "rule"
+        assert result.confidence is None
+        assert result.model_version is None
+
+        get_settings.cache_clear()
+
+    def test_low_confidence_fallback_also_reports_engine_rule(self, working_model, monkeypatch):
+        monkeypatch.setenv("ML_CONFIDENCE_THRESHOLD", "1.01")  # guarantees fallback
+        get_settings.cache_clear()
+
+        service = MLRecommendationService()
+        result = service.recommend_with_metadata(_make_input())
+
+        assert result.engine == "rule"
+        assert result.confidence is None
+
+        get_settings.cache_clear()

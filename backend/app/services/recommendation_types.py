@@ -66,3 +66,29 @@ class ScoredSplit:
     score: float = 0.0
     eligible: bool = True
     reasons: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class EngineRecommendation:
+    """A recommendation *plus* the metadata about how it was produced —
+    which engine, how confident it was, how long it took, which model
+    version. Added for the "Premium AI Recommendation Experience" phase so
+    the frontend can show this to users, without changing the existing
+    `RecommendationEngine.recommend(RecommendationInput) ->
+    WorkoutSplitDefinition` protocol method at all (see
+    `recommendation_engine.py` and `ml_recommendation_service.py` —
+    `.recommend()` on both engines is completely unchanged; each gained a
+    new, additional `recommend_with_metadata()` method instead that wraps
+    the exact same underlying logic).
+
+    `confidence` and `model_version` are `None` for the rule engine — it
+    has no probabilistic notion of confidence, and no model version to
+    report. The frontend is expected to hide those fields when `engine ==
+    "rule"` rather than show a fake/placeholder number.
+    """
+
+    split: WorkoutSplitDefinition
+    engine: str  # "ml" | "rule"
+    confidence: float | None
+    latency_ms: float
+    model_version: str | None
