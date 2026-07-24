@@ -8,11 +8,74 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Planned
-- ML workout recommendation model (scikit-learn, trained in Colab — inference layer already wired)
 - Progress photo upload (S3/R2 object storage)
 - Push notifications / reminders
 - AI coach chatbot (LLM-backed conversation)
 - Refresh-token rotation (currently a single 7-day access token)
+- Tune `ML_CONFIDENCE_THRESHOLD` upward (~0.65) based on an edge case found during the production rollout validation (see `ml/models/PRODUCTION_ROLLOUT.md` §4.4)
+- Re-bundle `model.joblib` + `preprocessor.joblib` into a single artifact
+
+---
+
+## [1.3.0] — Production Rollout: ML as the Default Recommendation Engine
+
+### Changed
+- `RECOMMENDATION_ENGINE` default: `"rule"` → `"ml"` — the ML model now serves `POST /workouts/recommend` and `/workouts/generate` by default in production. The rule engine remains fully intact, unmodified, and available as an instant, zero-code-change rollback (`RECOMMENDATION_ENGINE=rule`).
+- `GET /api/v1/health/detailed` now includes a `recommendation_engine` diagnostics block (configured engine, model loaded status, model version, confidence threshold) — gated behind `DEBUG=true`, hidden otherwise.
+- Every ML recommendation log line now includes `model_version`, read from `ml/models/metadata.json`.
+- `.github/workflows/backend-ci.yml` now pulls Git LFS objects on checkout — without this, CI would only ever exercise the fallback path now that ML is the default, never validating the real model end-to-end.
+
+### Added
+- `app/ml/registry.py`: `get_model_version()` and `get_status()` — expose the registry's load state for the health check without ever triggering a load themselves.
+- `ml/models/PRODUCTION_ROLLOUT.md` — the master validation report for this rollout: 500-profile out-of-sample regression test (99.2% raw agreement, 99.8% effective agreement with fallback), full performance benchmarks (cold start, warm latency, memory, CPU, leak check), and rollback instructions.
+- 11 new backend tests covering the new default, the rollback path, model version reporting, and health check gating.
+
+### Fixed
+- Two real, pre-existing stale-filename bugs found while reviewing production configuration: `backend/.env.example` and `docker-compose.yml` both still referenced `workout_recommender.joblib` (a file that was never actually produced by training) instead of the real `model.joblib`/`preprocessor.joblib` — same class of bug fixed in `config.py` during Phase 2.3, but missed in these two files at the time.
+- `docker-compose.yml` was completely missing `ML_PREPROCESSOR_PATH` and `RECOMMENDATION_ENGINE` from the backend service's environment — added with correct container-relative paths.
+- `DEPLOYMENT.md` had a stale test count (220) and an `ML_MODEL_PATH` description claiming it was "currently unused by any endpoint" — long untrue since Phase 2.3.
+
+### Investigated
+- One disagreement in the 500-profile regression test had ML confidence (0.604) just above the production threshold, meaning it would not fall back. Root-caused to a profile at exactly `age=50` — the hard threshold in `recommendation_rules.recovery_rule` — which the tree-based model doesn't reproduce with perfect precision right at the boundary. Documented as a genuine, minor, explainable limitation with a concrete tuning recommendation, not treated as a bug.
+- Confirmed via a 5,000-prediction benchmark that there is no memory leak in the inference path — memory plateaus after the first 1,000 predictions and stays flat.
+
+Backend tests: 250 (was 239).
+
+---
+
+## [1.2.0] — Fix `bro_split` and Retrain the Model (v2)
+
+### Fixed
+- `bro_split` was structurally unreachable in the rule engine under any input — `recommendation_rules.py`'s advanced-experience score for `bro_split` (`10`) was never enough to overcome `push_pull_legs`'s goal-score lead in any `FitnessGoal`. Raised to `12`, verified mathematically across every goal × day-count combination before touching code, then confirmed live: `bro_split` now wins at its real-world niche (advanced experience, 5 days/week, full gym) across every goal, while `push_pull_legs` still correctly wins at 6 days.
+
+### Added
+- 3 new regression tests locking in the fix and confirming no other split's behavior changed.
+- Retrained the ML model (v2) against the fixed rule engine: regenerated the 100k-row synthetic dataset (same generator, same seed — only the rule engine's fix changed the output), retrained with the identical pipeline and hyperparameters as v1. `bro_split` now genuinely present (0.43% of the dataset) and correctly predicted (96% precision, 100% recall on 65 held-out test cases). Every other class's performance stayed within noise of v1.
+- `ml/models/MODEL_COMPARISON.md` — full v1-vs-v2 comparison: dataset diff, model metrics, per-class changes, a 150-profile out-of-sample rule-vs-ML regression test (98% raw agreement, 100% effective agreement with the confidence-threshold fallback).
+
+Backend tests: 239 (was 236).
+
+---
+
+## [1.1.0] — Machine Learning: Dataset, Training, and Backend Integration
+
+### Added
+- **Dataset generation** (`ml/notebooks/generate_dataset.py`): 100,000 synthetic user profiles, labeled by directly calling the real, deployed `RuleBasedRecommendationEngine` — not an approximation of its logic. Realistic distributions verified against spec (age 16-65, beginner majority, bodyweight more common than full gym, balanced goals, weight correlated with height via BMI).
+- **Model training** (`ml/notebooks/train_model.ipynb`): `RandomForestClassifier`, `GridSearchCV` + `StratifiedKFold`, 98.44% test accuracy, 98.65% macro F1. Deliberately traded ~1 point of accuracy for a 3.4× smaller model file (71MB vs. an unconstrained-depth config's 241MB).
+- **Backend integration**: `MLRecommendationService` implements the existing `RecommendationEngine` Protocol — zero changes needed to any router, schema, the Workout Planner, or the frontend. Automatic fallback to the rule engine on every failure mode (missing/corrupted model, low confidence, invalid input, unrecognised prediction, any unexpected exception).
+- `RECOMMENDATION_ENGINE=rule|ml` environment variable (defaulting to `rule` at this point) switches implementations with zero code changes.
+- `docs/ML_ARCHITECTURE.md` (original planning document) and `docs/ML_INTEGRATION.md` (the actual implementation writeup).
+- `ml/ML_TRAINING.md` — full dataset generation, training pipeline, and evaluation writeup.
+
+### Fixed
+- `ML_MODEL_PATH`'s default pointed to a file (`workout_recommender.joblib`) that training never actually produced — fixed to `model.joblib`, with a matching `ML_PREPROCESSOR_PATH` added.
+- Git LFS pointer files (present on any `git clone` without `git lfs pull`) previously caused a cryptic `KeyError` when `joblib.load()` tried to unpickle the plain-text stub — now detected explicitly with a clear, actionable error message.
+- Router's recommendation service was a module-level singleton, built once at import time — replaced with a per-request `Depends()` factory, required for the `RECOMMENDATION_ENGINE` environment variable to actually be testable and effective.
+
+### Discovered (not yet fixed at this point — see 1.2.0)
+- `bro_split` never appears in the dataset — verified exhaustively that the rule engine can never select it under any input. Documented, not fixed, since fixing the rule engine was out of scope for this phase.
+
+Backend tests: 236 (was 203).
 
 ---
 

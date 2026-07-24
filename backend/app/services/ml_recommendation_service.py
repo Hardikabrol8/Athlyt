@@ -19,7 +19,7 @@ from app.core.config import get_settings
 from app.core.logging_config import get_logger
 from app.ml.feature_builder import build_feature_row
 from app.ml.inference.workout_recommender import predict
-from app.ml.registry import ModelLoadError, get_model_and_preprocessor
+from app.ml.registry import ModelLoadError, get_model_and_preprocessor, get_model_version
 from app.services.recommendation_engine import RuleBasedRecommendationEngine
 from app.services.recommendation_types import RecommendationInput
 from app.services.workout_splits import SPLIT_BY_KEY, WorkoutSplitDefinition
@@ -50,8 +50,9 @@ class MLRecommendationService:
             latency_ms = (time.perf_counter() - start) * 1000
             logger.warning(
                 "ML recommendation failed, falling back to rule engine "
-                "(reason=%s, latency_ms=%.1f)",
+                "(reason=%s, model_version=%s, latency_ms=%.1f)",
                 exc,
+                get_model_version() or "unknown",
                 latency_ms,
             )
             return self._fallback(recommendation_input)
@@ -61,10 +62,11 @@ class MLRecommendationService:
             latency_ms = (time.perf_counter() - start) * 1000
             logger.info(
                 "ML confidence %.3f below threshold %.3f, falling back to rule engine "
-                "(predicted=%s, latency_ms=%.1f)",
+                "(predicted=%s, model_version=%s, latency_ms=%.1f)",
                 confidence,
                 settings.ML_CONFIDENCE_THRESHOLD,
                 split_key,
+                get_model_version() or "unknown",
                 latency_ms,
             )
             return self._fallback(recommendation_input)
@@ -78,17 +80,20 @@ class MLRecommendationService:
             latency_ms = (time.perf_counter() - start) * 1000
             logger.warning(
                 "ML model predicted an unrecognised split key %r, falling back to rule "
-                "engine (latency_ms=%.1f)",
+                "engine (model_version=%s, latency_ms=%.1f)",
                 split_key,
+                get_model_version() or "unknown",
                 latency_ms,
             )
             return self._fallback(recommendation_input)
 
         latency_ms = (time.perf_counter() - start) * 1000
         logger.info(
-            "Recommendation served by ML model (split=%s, confidence=%.3f, latency_ms=%.1f)",
+            "Recommendation served by ML model (split=%s, confidence=%.3f, "
+            "model_version=%s, latency_ms=%.1f)",
             split_key,
             confidence,
+            get_model_version() or "unknown",
             latency_ms,
         )
         return SPLIT_BY_KEY[split_key]

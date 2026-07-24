@@ -37,6 +37,8 @@ pip install -e .
 ```
 This reads `backend/pyproject.toml` and installs FastAPI, SQLAlchemy, Alembic, psycopg2-binary, and every other listed dependency. (`.[dev]` is not needed in production — that installs ruff/black/pytest, which the running server never uses.)
 
+**Git LFS note:** `ml/models/model.joblib` and `preprocessor.joblib` are tracked via Git LFS. Render's git-based deploys generally pull LFS objects automatically, but this varies by plan/configuration — verify it after your first deploy by checking `GET /health/detailed` (with `DEBUG=true` temporarily) for `"ml_model_loaded": true`. If it's `false`, see §8.2's troubleshooting note.
+
 ### 2.3 Start command
 ```
 alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -53,7 +55,7 @@ If step 1 fails, step 2 never runs — a broken migration surfaces immediately i
 ```
 Returns `{"status": "ok", "version": "0.1.0", "database": "healthy"}` when everything is working. Render polls this to decide whether a deploy succeeded and whether the service is currently healthy. Defined in `backend/app/api/v1/routers/health.py`.
 
-A more detailed variant exists at `/api/v1/health/detailed` (adds environment name and Python version) — useful for manual debugging, not needed for the health check configuration itself.
+A more detailed variant exists at `/api/v1/health/detailed` (adds environment name, Python version, and — when `DEBUG=true` — the recommendation engine's current state: configured engine, whether the ML model loaded, its version, and the confidence threshold). Useful for manual debugging; not needed for the health check configuration itself, and not shown by default (see `ml/models/PRODUCTION_ROLLOUT.md` §3.2).
 
 ### 2.5 Required environment variables
 
@@ -62,11 +64,12 @@ Set these in Render's dashboard under your service → **Environment**:
 | Variable | Value | Notes |
 |---|---|---|
 | `ENVIRONMENT` | `production` | Switches off `create_all()` — see §8.1 |
-| `DEBUG` | `false` | Disables SQL query logging |
+| `DEBUG` | `false` | Disables SQL query logging and hides ML diagnostics on `/health/detailed` |
 | `DATABASE_URL` | *(from Neon/Supabase, see §4)* | Must start with `postgresql+psycopg2://` |
 | `JWT_SECRET_KEY` | *(generate — see below)* | ≥ 32 characters, or the app refuses to start |
 | `CORS_ORIGINS` | `https://your-app.vercel.app` | No trailing slash; comma-separate multiple origins |
 | `ALLOWED_HOSTS` | `your-backend.onrender.com` | Your actual Render URL once assigned |
+| `RECOMMENDATION_ENGINE` | `ml` (default — can omit) | Set to `rule` for an instant rollback with zero code changes; see `ml/models/PRODUCTION_ROLLOUT.md` §7 |
 
 Generate `JWT_SECRET_KEY` locally before deploying:
 ```bash
@@ -264,8 +267,11 @@ Paste the same connection string (with `postgresql+psycopg2://` and `?sslmode=re
 | `CORS_ORIGINS` | **Required** | All | `app/main.py` | Comma-separated frontend origin(s) allowed to call the API. |
 | `ALLOWED_HOSTS` | Optional (defaults to `*`) | Production only (meaningfully) | `app/main.py` | Comma-separated hostnames this API accepts via the `Host` header. `*` in dev is fine; set to the real domain in production. |
 | `ENVIRONMENT` | Optional (defaults to `local`) | All | `app/main.py`, `app/core/logging_config.py` | `local` \| `test` \| `production`. Controls schema creation strategy and log verbosity. |
-| `DEBUG` | Optional (defaults to `false`) | Development only (meaningfully) | `app/db/session.py` | `true` enables SQL query echoing. Never set `true` in production — noisy and can leak query parameters into logs. |
-| `ML_MODEL_PATH` | Optional (has default) | All | `app/core/config.py` | Path to the trained `.joblib` workout-recommendation model. Currently unused by any endpoint — reserved for a future ML integration. |
+| `DEBUG` | Optional (defaults to `false`) | Development only (meaningfully) | `app/db/session.py`, `app/api/v1/routers/health.py` | `true` enables SQL query echoing and exposes ML engine diagnostics on `GET /health/detailed` (model version, load status, confidence threshold — see `ml/models/PRODUCTION_ROLLOUT.md` §3.2). Never set `true` in production — noisy, and the health check detail is meant to stay internal. |
+| `RECOMMENDATION_ENGINE` | Optional (defaults to **`ml`**) | Production-relevant | `app/core/config.py` | `rule` \| `ml`. Which engine serves `/workouts/recommend` and `/workouts/generate`. `ml` falls back to the rule engine automatically on any failure — see `docs/ML_INTEGRATION.md`. Set to `rule` for an instant rollback with zero code changes. |
+| `ML_MODEL_PATH` | Optional (has default) | All | `app/core/config.py` | Path to the trained `.joblib` workout-recommendation model, relative to `backend/`'s working directory. Tracked via Git LFS — see §8 below. |
+| `ML_PREPROCESSOR_PATH` | Optional (has default) | All | `app/core/config.py` | Path to the fitted preprocessor `.joblib`, loaded alongside the model above. |
+| `ML_CONFIDENCE_THRESHOLD` | Optional (defaults to `0.6`) | Production-relevant | `app/core/config.py` | Below this `predict_proba()` confidence, the ML engine defers to the rule engine. See `ml/models/PRODUCTION_ROLLOUT.md` §4 for how this value was validated against 500 real out-of-sample profiles. |
 
 ### 5.2 Frontend
 
@@ -384,8 +390,9 @@ Run every one of these locally before pushing. If any fails, fix it before deplo
 ```bash
 # ── Backend ──────────────────────────────────────────────────────────────
 cd backend
+git lfs pull                 # required: ML_MODEL_PATH/ML_PREPROCESSOR_PATH default files are Git LFS-tracked
 pip install -e ".[dev]"
-pytest -q                    # expect: 220 passed
+pytest -q                    # expect: 250 passed
 ruff check .                 # expect: All checks passed!
 black --check .              # expect: All done! ✨ 🍰 ✨
 
@@ -416,6 +423,33 @@ open http://localhost:8000/docs   # or just visit in browser
 kill %1
 rm verify.db
 ```
+
+### 8.2 Verify the ML recommendation engine before deploying
+
+`RECOMMENDATION_ENGINE` defaults to `ml`. Confirm the real model actually loads and predicts — not just that the fallback silently catches a missing model (which it will, correctly, but that's not the same as verifying ML is genuinely working):
+
+```bash
+cd backend
+git lfs pull   # if you haven't already — see §8 above
+export JWT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
+export DATABASE_URL=sqlite:///./verify_ml.db
+export ENVIRONMENT=local
+export DEBUG=true
+uvicorn app.main:app --port 8000 &
+sleep 2
+
+# Register, onboard, and request a recommendation, then check the health
+# endpoint and server logs for confirmation the real model was used:
+curl -s http://localhost:8000/api/v1/health/detailed | python3 -m json.tool
+# Look for: "ml_model_loaded": true, "ml_model_version": "v2" (after at
+# least one recommendation request — see ml/models/PRODUCTION_ROLLOUT.md
+# §3.2 for why this is false/false on a completely fresh process)
+
+kill %1
+rm verify_ml.db
+```
+
+If `ml_model_loaded` stays `false` after a real recommendation request, check the server log for a `WARNING` from `app.ml.registry` — the most common cause is `git lfs pull` not having been run, leaving `ml/models/*.joblib` as small pointer files (handled gracefully via automatic fallback, but ML predictions won't actually happen until the real files are present). See `docs/ML_INTEGRATION.md` §3.1.
 
 ---
 

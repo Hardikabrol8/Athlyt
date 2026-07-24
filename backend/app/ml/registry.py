@@ -38,6 +38,7 @@ logger = get_logger(__name__)
 
 _model: Any = None
 _preprocessor: Any = None
+_model_version: str | None = None
 _load_error: Exception | None = None
 _load_attempted = False
 
@@ -75,8 +76,28 @@ def _looks_like_lfs_pointer(path: Path) -> bool:
         return False
 
 
+def _load_model_version(model_path: Path) -> str | None:
+    """Best-effort read of `model_version` from the metadata.json sitting
+    next to the model file — same directory, since ml/models/metadata.json
+    is written by the training pipeline alongside model.joblib/
+    preprocessor.joblib (see ml/notebooks/train_model.ipynb). Never raises:
+    a missing or malformed metadata.json shouldn't prevent the model itself
+    from loading — this is diagnostic information for logging and the
+    health check, not something the prediction path depends on.
+    """
+    import json
+
+    metadata_path = model_path.parent / "metadata.json"
+    try:
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        return metadata.get("model_version")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+
+
 def _load() -> None:
-    global _model, _preprocessor, _load_error, _load_attempted
+    global _model, _preprocessor, _model_version, _load_error, _load_attempted
 
     _load_attempted = True
     settings = get_settings()
@@ -99,11 +120,13 @@ def _load() -> None:
 
         _model = joblib.load(model_path)
         _preprocessor = joblib.load(preprocessor_path)
+        _model_version = _load_model_version(model_path)
         _load_error = None
         logger.info(
-            "ML model loaded successfully: model=%s preprocessor=%s",
+            "ML model loaded successfully: model=%s preprocessor=%s model_version=%s",
             model_path,
             preprocessor_path,
+            _model_version or "unknown",
         )
     except Exception as exc:  # noqa: BLE001 — deliberately broad: any load
         # failure (missing file, corrupted pickle, version mismatch between
@@ -112,6 +135,7 @@ def _load() -> None:
         # raised past this module.
         _model = None
         _preprocessor = None
+        _model_version = None
         _load_error = exc
         logger.warning("ML model failed to load: %s", exc)
 
@@ -133,12 +157,38 @@ def get_model_and_preprocessor() -> tuple[Any, Any]:
     return _model, _preprocessor
 
 
+def get_model_version() -> str | None:
+    """Returns the currently loaded model's version string (from
+    metadata.json), or `None` if no model is loaded or the version couldn't
+    be determined. Never raises, never triggers a load attempt on its own —
+    callers wanting the up-to-date state should call
+    `get_model_and_preprocessor()` first (e.g. the health check does this).
+    """
+    return _model_version
+
+
+def get_status() -> dict:
+    """A snapshot of the registry's current state, for the health check
+    endpoint — never triggers a load attempt itself (uses whatever's
+    already been loaded, or not, by prior requests), so hitting the health
+    check can't itself cause a slow cold-start load or a misleading
+    "just checked and it's fine" result that doesn't reflect real traffic.
+    """
+    return {
+        "attempted": _load_attempted,
+        "loaded": _load_error is None and _model is not None,
+        "model_version": _model_version,
+        "error": str(_load_error) if _load_error is not None else None,
+    }
+
+
 def reset_for_testing() -> None:
     """Clears the module-level cache. Only ever called from tests — lets a
     test simulate "the model hasn't loaded yet" or reload after monkeypatching
     settings, without needing a fresh Python process."""
-    global _model, _preprocessor, _load_error, _load_attempted
+    global _model, _preprocessor, _model_version, _load_error, _load_attempted
     _model = None
     _preprocessor = None
+    _model_version = None
     _load_error = None
     _load_attempted = False

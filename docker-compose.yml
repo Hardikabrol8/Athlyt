@@ -58,8 +58,17 @@ services:
       # network where the frontend calls the backend by service name, but
       # set to your real domain if this container is ever exposed directly.
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
-      # ML model path (mounted below)
-      ML_MODEL_PATH: /app/ml/models/workout_recommender.joblib
+      # Recommendation engine — "ml" (default) with automatic fallback to
+      # the rule engine, or "rule" for an instant rollback with zero code
+      # changes. See ml/models/PRODUCTION_ROLLOUT.md.
+      RECOMMENDATION_ENGINE: ${RECOMMENDATION_ENGINE:-ml}
+      # ML model + preprocessor paths — must match the volume mount below
+      # (./ml/models -> /app/ml/models). Tracked via Git LFS; run
+      # `git lfs pull` before `docker compose up` or these resolve to small
+      # LFS pointer files, not the real model (handled gracefully — falls
+      # back to the rule engine — but ML predictions won't work until pulled).
+      ML_MODEL_PATH: /app/ml/models/model.joblib
+      ML_PREPROCESSOR_PATH: /app/ml/models/preprocessor.joblib
     volumes:
       # Mount the shared ml/models directory so the backend can load the
       # trained model artifact without embedding it in the image.

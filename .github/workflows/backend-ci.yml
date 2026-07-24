@@ -26,6 +26,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # RECOMMENDATION_ENGINE now defaults to "ml" (see app/core/config.py) —
+          # without this, ml/models/*.joblib checks out as small Git LFS
+          # pointer files, not the real model, and CI would only ever
+          # exercise the fallback path (still correct, but never actually
+          # validates the real ML prediction path end-to-end).
+          lfs: true
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5

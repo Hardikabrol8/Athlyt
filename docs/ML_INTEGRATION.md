@@ -1,6 +1,6 @@
 # Athlyt — ML Recommendation Engine Integration (Phase 2.3)
 
-**Status:** Implemented, tested, not yet the default. `RECOMMENDATION_ENGINE` defaults to `"rule"` — the ML engine is available but must be explicitly opted into.
+**Status:** Implemented, tested, **and promoted to the production default** (Phase 2.4 — see `ml/models/PRODUCTION_ROLLOUT.md` for the full rollout report). `RECOMMENDATION_ENGINE` now defaults to `"ml"`. The rule engine remains fully intact and unmodified — set `RECOMMENDATION_ENGINE=rule` for an instant rollback with zero code changes (see `ml/models/PRODUCTION_ROLLOUT.md` §7 for the exact procedure).
 
 ---
 
@@ -116,30 +116,38 @@ Every one of these is caught inside `MLRecommendationService.recommend()` and si
 
 | Variable | Values | Default | Description |
 |---|---|---|---|
-| `RECOMMENDATION_ENGINE` | `rule` \| `ml` | `rule` | Which engine actually serves `/workouts/recommend` and `/workouts/generate` |
+| `RECOMMENDATION_ENGINE` | `rule` \| `ml` | **`ml`** | Which engine actually serves `/workouts/recommend` and `/workouts/generate` |
 | `ML_MODEL_PATH` | file path | `../ml/models/model.joblib` | Relative to the backend's working directory |
 | `ML_PREPROCESSOR_PATH` | file path | `../ml/models/preprocessor.joblib` | Same |
 | `ML_CONFIDENCE_THRESHOLD` | `0.0`–`1.0` | `0.6` | Below this `predict_proba()` confidence, defer to the rule engine |
 
-Switching `RECOMMENDATION_ENGINE=ml` in production requires **no code change** — set the environment variable on your hosting platform (Render/Railway/Docker) and restart. See §2 for exactly how this takes effect without a module reload.
+Switching `RECOMMENDATION_ENGINE=rule` in production (rollback) requires **no code change** — set the environment variable on your hosting platform (Render/Railway/Docker) and restart. See §2 for exactly how this takes effect without a module reload, and `ml/models/PRODUCTION_ROLLOUT.md` §7 for the full rollback procedure.
 
-### 5.1 Choosing `ML_CONFIDENCE_THRESHOLD`
+### 5.1 Choosing `ML_CONFIDENCE_THRESHOLD` — now backed by real validation data
 
-`0.6` is a deliberately conservative starting point — well above a random-guess baseline for a 5-class problem (`0.2`), but not so high that it defeats the point of using the model at all. `ml/models/evaluation_report.md` shows the trained model is typically very confident (>0.9) on real predictions, so `0.6` should rarely trigger in practice once a real trained model is loaded — it exists mainly to catch genuinely ambiguous edge cases, not to second-guess the model constantly. Tune this based on real production confidence distributions once there's traffic to observe (the confidence is logged on every prediction — see §6).
+`0.6` was originally a deliberately conservative starting point — well above a random-guess baseline for a 5-class problem (`0.2`). It's since been validated against a 500-profile out-of-sample regression test (`ml/models/PRODUCTION_ROLLOUT.md` §4): mean confidence 0.855, median 0.905, with 8.4% of predictions falling below 0.6 (the population the fallback mechanism exists to catch).
+
+**One real finding from that validation worth knowing:** one disagreement had confidence 0.604 — just above threshold, so it would *not* fall back — traced to a profile hitting `recommendation_rules`'s exact `age >= 50` recovery threshold, a sharp rule-engine cutoff the model doesn't reproduce with perfect precision right at the boundary. Raising the threshold to `~0.65` would catch this specific class of edge case while still leaving the large majority of real predictions confidently above it. Not urgent — this is a tuning refinement, not a production incident — but worth doing once there's real traffic to validate against instead of only synthetic data.
 
 ---
 
 ## 6. Logging
 
-Every recommendation logs its source, and — for ML predictions — confidence and latency:
+Every recommendation logs its source, and — for ML predictions — confidence, latency, and model version:
 
 ```
-INFO  Recommendation served by ML model (split=push_pull_legs, confidence=0.940, latency_ms=3.2)
-INFO  ML confidence 0.412 below threshold 0.600, falling back to rule engine (predicted=upper_lower, latency_ms=2.1)
-WARNING  ML recommendation failed, falling back to rule engine (reason=..., latency_ms=1.2)
+INFO  Recommendation served by ML model (split=push_pull_legs, confidence=0.940, model_version=v2, latency_ms=3.2)
+INFO  ML confidence 0.412 below threshold 0.600, falling back to rule engine (predicted=upper_lower, model_version=v2, latency_ms=2.1)
+WARNING  ML recommendation failed, falling back to rule engine (reason=..., model_version=unknown, latency_ms=1.2)
 ```
 
-No request payloads, no user profile data, and no internal stack traces are ever included in the log message text itself — only the split key, confidence score, and latency, matching the existing logging policy in `app/core/logging_config.py` (nothing sensitive is ever logged). API responses never expose which engine actually served the recommendation, why a fallback happened, or any internal error detail — from the client's perspective, a fallback and a successful ML prediction are indistinguishable, both are just a normal `RecommendationResponse`.
+`model_version` is read from `ml/models/metadata.json` (written by the training pipeline) — logged as `"unknown"` when the model failed to load at all (so there's nothing to read a version from), and the real version string (e.g. `"v2"`) whenever a load succeeded, regardless of whether that specific request ended up using the ML prediction or falling back on confidence.
+
+No request payloads, no user profile data, and no internal stack traces are ever included in the log message text itself — only the split key, confidence score, latency, and model version, matching the existing logging policy in `app/core/logging_config.py` (nothing sensitive is ever logged). API responses never expose which engine actually served the recommendation, why a fallback happened, or any internal error detail — from the client's perspective, a fallback and a successful ML prediction are indistinguishable, both are just a normal `RecommendationResponse`.
+
+### 6.1 Health check diagnostics
+
+`GET /api/v1/health/detailed` exposes the same information the logs carry (configured engine, model loaded status, model version, confidence threshold) as a point-in-time snapshot — but **only when `DEBUG=true`**, since this is internal operational detail, not something a public health endpoint should show by default. See `ml/models/PRODUCTION_ROLLOUT.md` §3.2 for the exact response shape and the reasoning behind gating it this way.
 
 ---
 
@@ -161,30 +169,36 @@ All ML-specific tests use a **real, tiny** `RandomForestClassifier` + `ColumnTra
 
 | Test file | Covers |
 |---|---|
-| `tests/test_ml_registry.py` | Model loading, caching, missing files, corrupted files, Git LFS pointer detection |
+| `tests/test_ml_registry.py` | Model loading, caching, missing files, corrupted files, Git LFS pointer detection, model version reading, status reporting |
 | `tests/test_ml_feature_builder.py` | Feature row construction, correct column order/values, invalid input |
 | `tests/test_ml_recommendation_service.py` | Successful prediction, every fallback trigger, logging |
-| `tests/test_recommendation_engine_switching.py` | The `RECOMMENDATION_ENGINE` env var, through the real HTTP API |
+| `tests/test_recommendation_engine_switching.py` | The `RECOMMENDATION_ENGINE` env var (now defaulting to `ml`), rule-engine rollback availability, through the real HTTP API |
+| `tests/test_health.py` | Health check's ML diagnostics block and its `DEBUG` gating |
 
-**236 total backend tests, all passing** (203 pre-existing + 33 new for this phase).
+**250 total backend tests, all passing** (203 pre-existing + 33 from the Phase 2.3 integration + 14 from the production rollout).
 
 Run just the ML-related tests:
 ```bash
 cd backend
-pytest tests/test_ml_registry.py tests/test_ml_feature_builder.py tests/test_ml_recommendation_service.py tests/test_recommendation_engine_switching.py -v
+pytest tests/test_ml_registry.py tests/test_ml_feature_builder.py tests/test_ml_recommendation_service.py tests/test_recommendation_engine_switching.py tests/test_health.py -v
 ```
 
 ### 8.1 Verifying against the real, trained model (not the test doubles)
 
-The tests above deliberately use a tiny synthetic model so they run fast and don't depend on a 71MB Git LFS artifact being present in CI. To verify the actual, real trained model end-to-end:
+The tests above deliberately use a tiny synthetic model so they run fast and don't depend on a 71MB Git LFS artifact being present in CI (see the CI note in §8.2 below — CI now pulls the real LFS files anyway, but the unit tests still use the fast synthetic doubles by design). To verify the actual, real trained model end-to-end:
 
 ```bash
 cd backend
 git lfs pull  # ensure the real model.joblib/preprocessor.joblib are present, not pointer stubs
 
-export RECOMMENDATION_ENGINE=ml
+# RECOMMENDATION_ENGINE=ml is now the default -- no env var needed to opt in.
+# To verify the rollback path instead, explicitly set RECOMMENDATION_ENGINE=rule.
 uvicorn app.main:app --reload
 # then hit POST /workouts/recommend as an authenticated user and confirm
 # the response looks sensible, and check the logs for
-# "Recommendation served by ML model (split=..., confidence=...)"
+# "Recommendation served by ML model (split=..., confidence=..., model_version=v2, ...)"
 ```
+
+### 8.2 CI now validates the real ML path, not just the fallback
+
+`.github/workflows/backend-ci.yml`'s checkout step now sets `lfs: true`. Without this, `ml/models/*.joblib` checks out in CI as small Git LFS pointer files (not the real model), and since `RECOMMENDATION_ENGINE` now defaults to `ml`, every test that doesn't explicitly override the model path would silently exercise only the fallback path — passing, but never actually validating the real prediction path end-to-end in CI. With `lfs: true`, CI now genuinely loads and predicts with the real model on every run.

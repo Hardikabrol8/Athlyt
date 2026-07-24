@@ -74,11 +74,18 @@ class Settings(BaseSettings):
     ML_PREPROCESSOR_PATH: str = "../ml/models/preprocessor.joblib"
 
     # Which recommendation engine actually serves POST /workouts/recommend:
-    #   "rule" — RuleBasedRecommendationEngine only (the original, always-on engine)
-    #   "ml"   — MLRecommendationService, which internally falls back to the
-    #            rule engine on any failure or low-confidence prediction
-    # See docs/ML_INTEGRATION.md for the full fallback design.
-    RECOMMENDATION_ENGINE: Literal["rule", "ml"] = "rule"
+    #   "ml"   — MLRecommendationService (default, as of the production
+    #            rollout) — internally falls back to RuleBasedRecommendationEngine
+    #            on any failure or low-confidence prediction, so this is safe
+    #            to run as the default: every failure mode still produces a
+    #            normal, correct rule-based recommendation, just logged
+    #            differently. See docs/ML_INTEGRATION.md for the full
+    #            fallback design and the rollout's validation results.
+    #   "rule" — RuleBasedRecommendationEngine only, no ML involved at all.
+    #            Set this to instantly and completely disable the ML path —
+    #            e.g. to roll back a bad deploy — with zero code changes,
+    #            just an environment variable change and a restart.
+    RECOMMENDATION_ENGINE: Literal["rule", "ml"] = "ml"
 
     # Below this predict_proba() confidence, MLRecommendationService discards
     # the ML prediction and defers to the rule engine instead — an uncertain

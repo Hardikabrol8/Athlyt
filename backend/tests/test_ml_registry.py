@@ -145,3 +145,76 @@ class TestModelLoading:
             get_model_and_preprocessor()
 
         get_settings.cache_clear()
+
+
+class TestModelVersion:
+    def test_get_model_version_returns_none_before_any_load_attempt(self):
+        assert registry.get_model_version() is None
+
+    def test_get_model_version_returns_the_version_from_metadata_json(self, tmp_path, monkeypatch):
+        import json
+
+        model, preprocessor = build_tiny_model_and_preprocessor()
+        model_path = tmp_path / "model.joblib"
+        preprocessor_path = tmp_path / "preprocessor.joblib"
+        joblib.dump(model, model_path)
+        joblib.dump(preprocessor, preprocessor_path)
+
+        # metadata.json must sit next to model.joblib, matching production layout.
+        with open(tmp_path / "metadata.json", "w") as f:
+            json.dump({"model_version": "test-v99"}, f)
+
+        monkeypatch.setenv("ML_MODEL_PATH", str(model_path))
+        monkeypatch.setenv("ML_PREPROCESSOR_PATH", str(preprocessor_path))
+        get_settings.cache_clear()
+
+        get_model_and_preprocessor()  # triggers the load
+        assert registry.get_model_version() == "test-v99"
+
+        get_settings.cache_clear()
+
+    def test_get_model_version_is_none_when_metadata_json_missing(self, real_model_files):
+        # real_model_files fixture doesn't write a metadata.json alongside
+        # the model — confirms this is handled gracefully, not an error.
+        get_model_and_preprocessor()
+        assert registry.get_model_version() is None
+
+
+class TestGetStatus:
+    def test_status_before_any_load_attempt(self):
+        status = registry.get_status()
+        assert status["attempted"] is False
+        assert status["loaded"] is False
+        assert status["model_version"] is None
+        assert status["error"] is None
+
+    def test_status_after_successful_load(self, real_model_files):
+        get_model_and_preprocessor()
+        status = registry.get_status()
+        assert status["attempted"] is True
+        assert status["loaded"] is True
+        assert status["error"] is None
+
+    def test_status_after_failed_load(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ML_MODEL_PATH", str(tmp_path / "nope.joblib"))
+        monkeypatch.setenv("ML_PREPROCESSOR_PATH", str(tmp_path / "nope2.joblib"))
+        get_settings.cache_clear()
+
+        try:
+            get_model_and_preprocessor()
+        except ModelLoadError:
+            pass
+
+        status = registry.get_status()
+        assert status["attempted"] is True
+        assert status["loaded"] is False
+        assert status["error"] is not None
+
+        get_settings.cache_clear()
+
+    def test_status_never_triggers_a_load_itself(self, real_model_files):
+        """Calling get_status() before ever calling get_model_and_preprocessor()
+        must not itself cause a load — this is what makes hitting the health
+        check safe to do without side effects."""
+        status = registry.get_status()
+        assert status["attempted"] is False  # confirms get_status() didn't trigger anything

@@ -10,7 +10,7 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 
 [![Backend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/backend-ci.yml)
 [![Frontend CI](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Hardikabrol8/Athlyt/actions/workflows/frontend-ci.yml)
-[![Backend Tests](https://img.shields.io/badge/tests-239%20passing-brightgreen)](backend/tests)
+[![Backend Tests](https://img.shields.io/badge/tests-250%20passing-brightgreen)](backend/tests)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](backend/pyproject.toml)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](frontend/package.json)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -71,7 +71,7 @@ An AI-powered fitness coaching platform — personalised workout plans, nutritio
 | **Backend** | FastAPI, SQLAlchemy 2.0, Pydantic v2, PyJWT, bcrypt |
 | **Database** | SQLite (dev) / PostgreSQL via Neon (prod) |
 | **ML** | scikit-learn (RandomForestClassifier), trained in Colab, loaded via joblib |
-| **Testing** | pytest (239 tests), ruff, black |
+| **Testing** | pytest (250 tests), ruff, black |
 | **CI/CD** | GitHub Actions (backend + frontend, on every push/PR) |
 | **Containerization** | Docker + Docker Compose (backend, frontend, PostgreSQL) |
 
@@ -106,7 +106,9 @@ A `RandomForestClassifier` has been trained to predict the same workout-split re
 
 > **Retrained (v2):** the model was originally trained before the `bro_split` fix and never predicted it. It has since been retrained on a freshly regenerated dataset against the fixed rule engine — `bro_split` now makes up 0.43% of the training data and the retrained model correctly predicts it with 96% precision / 100% recall on held-out test data. A 150-profile out-of-sample regression test comparing the rule engine directly against the retrained model shows 98% raw agreement; the only 3 disagreements all fell below the production confidence threshold, meaning the deployed system's effective agreement (accounting for the automatic fallback) is 100%. Full comparison: [ml/models/MODEL_COMPARISON.md](ml/models/MODEL_COMPARISON.md).
 
-**Current status:** trained, evaluated, **and now integrated into the backend** as an optional, fallback-safe engine (`MLRecommendationService`) — available behind `RECOMMENDATION_ENGINE=ml`, defaulting to `rule` in production until there's real confidence-distribution data to tune against. Every failure mode (missing model, low confidence, corrupted file, invalid input) falls back to the original rule engine automatically — the API never returns an error because the ML model failed. See [docs/ML_INTEGRATION.md](docs/ML_INTEGRATION.md) for the full integration design, [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) for the original architecture plan, and [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the training pipeline, dataset generation, and evaluation writeup.
+**Current status:** trained, evaluated, integrated, **and now the default recommendation engine in production** (`RECOMMENDATION_ENGINE=ml`). Every failure mode (missing model, low confidence, corrupted file, invalid input, unexpected exception) falls back to the original rule engine automatically — the API never returns an error because the ML model failed. Validated against 500 fresh out-of-sample profiles: **99.2% raw agreement** with the rule engine, **99.8% effective agreement** once the confidence-threshold fallback is accounted for. See [docs/ML_INTEGRATION.md](docs/ML_INTEGRATION.md) for the full integration design, [ml/models/PRODUCTION_ROLLOUT.md](ml/models/PRODUCTION_ROLLOUT.md) for the complete rollout report (validation, benchmarks, rollback instructions), [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) for the original architecture plan, and [ml/ML_TRAINING.md](ml/ML_TRAINING.md) for the training pipeline and dataset generation writeup.
+
+> **Instant rollback:** set `RECOMMENDATION_ENGINE=rule` and restart — zero code changes, the rule engine is fully intact and was never modified or removed. See [ml/models/PRODUCTION_ROLLOUT.md](ml/models/PRODUCTION_ROLLOUT.md) §7.
 
 > Model files (`ml/models/*.joblib`) are tracked via [Git LFS](https://git-lfs.github.com) — run `git lfs install && git lfs pull` before relying on the ML engine; a bare `git clone` without LFS checks out small pointer files, not the real model (handled gracefully — see [docs/ML_INTEGRATION.md](docs/ML_INTEGRATION.md) §3.1 — but the ML engine won't actually predict anything until the real files are pulled).
 
@@ -260,7 +262,7 @@ npm run dev
 | `ALLOWED_HOSTS` | — | Comma-separated hostnames (Host header check). `*` (dev) or your API domain (prod) |
 | `ENVIRONMENT` | — | `local` \| `production` (default: `local`) |
 | `DEBUG` | — | `true` \| `false` (default: `false`) |
-| `RECOMMENDATION_ENGINE` | — | `rule` \| `ml` (default: `rule`). See [docs/ML_INTEGRATION.md](docs/ML_INTEGRATION.md) |
+| `RECOMMENDATION_ENGINE` | — | `rule` \| `ml` (default: **`ml`**). See [docs/ML_INTEGRATION.md](docs/ML_INTEGRATION.md) |
 | `ML_MODEL_PATH` | — | Default: `../ml/models/model.joblib` |
 | `ML_PREPROCESSOR_PATH` | — | Default: `../ml/models/preprocessor.joblib` |
 | `ML_CONFIDENCE_THRESHOLD` | — | `0.0`–`1.0` (default: `0.6`) — below this, defer to the rule engine |
@@ -288,7 +290,7 @@ athlyt/
 │   │   ├── db/                — Engine, session, seed data
 │   │   └── ml/                — Inference layer (planned integration point)
 │   ├── alembic/               — Database migrations
-│   └── tests/                 — 239 pytest tests
+│   └── tests/                 — 250 pytest tests
 ├── frontend/
 │   ├── app/                   — Next.js App Router pages
 │   ├── components/            — UI components (shared, landing, auth, domain)
@@ -340,7 +342,7 @@ Health:      GET  /health, /health/detailed
 ## Testing
 
 ```bash
-# Backend — 239 tests
+# Backend — 250 tests
 cd backend && pytest
 
 # Lint & format
@@ -407,9 +409,10 @@ Key design: PostgreSQL in production (Neon), SQLite in local dev — one shared 
 - [x] ML model integrated into the backend behind `RECOMMENDATION_ENGINE=ml`, with automatic fallback to the rule engine
 - [x] Fixed the `bro_split` dead-code bug in the rule engine (discovered during ML dataset generation — see [ml/ML_TRAINING.md](ml/ML_TRAINING.md))
 - [x] Regenerated the ML training dataset and retrained (v2) against the fixed rule engine — model now correctly predicts `bro_split` (96% precision, 100% recall); see [ml/models/MODEL_COMPARISON.md](ml/models/MODEL_COMPARISON.md)
+- [x] **ML promoted to the default recommendation engine in production** — validated against 500 out-of-sample profiles (99.2% raw agreement, 99.8% effective agreement with fallback), benchmarked (cold start ~1.3s, warm latency ~11ms, no memory leak); see [ml/models/PRODUCTION_ROLLOUT.md](ml/models/PRODUCTION_ROLLOUT.md)
 
 **Remaining:**
-- [ ] Switch `RECOMMENDATION_ENGINE` default to `ml` in production, once confidence-threshold tuning has real traffic to observe
+- [ ] Tune `ML_CONFIDENCE_THRESHOLD` upward slightly (~0.65) based on a specific edge case found during rollout validation — a rule-engine hard threshold (age ≥ 50) the model doesn't reproduce with perfect precision at the exact boundary; see [ml/models/PRODUCTION_ROLLOUT.md](ml/models/PRODUCTION_ROLLOUT.md) §4.4
 - [ ] Re-bundle `model.joblib` + `preprocessor.joblib` into a single artifact (see [docs/ML_ARCHITECTURE.md](docs/ML_ARCHITECTURE.md) §5.6)
 - [ ] AI coach (LLM-backed chatbot)
 - [ ] Progress photo upload (S3/R2)
