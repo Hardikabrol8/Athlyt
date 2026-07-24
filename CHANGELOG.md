@@ -193,3 +193,14 @@ Backend tests: 236 (was 203).
 - Ruff + Black linting
 - Responsive layout, dark mode, Framer Motion animations
 - `DashboardStatCard`, `GlassCard`, `SectionHeader`, `PrimaryButton` shared components
+
+---
+
+## [1.3.1] — Fix scikit-learn Version Conflict
+
+### Fixed
+- `model.joblib`/`preprocessor.joblib` were originally pickled with scikit-learn 1.9.0, triggering `InconsistentVersionWarning` in any environment resolving an older, more common version (e.g. 1.5.2). An initial fix attempt pinned `pyproject.toml` to exactly `scikit-learn==1.9.0` — this backfired in a real environment, conflicting with `sklearn-compat` (a transitive dependency of another installed package), which requires `scikit-learn<1.9`.
+- Corrected by retraining the model (v2.1) with `scikit-learn==1.5.2` — same dataset, same seed, same hyperparameters as v2, only the library version differs — and tightening `pyproject.toml`'s constraint to `scikit-learn>=1.5,<1.9` (respecting the real-world `sklearn-compat` conflict, not just picking an arbitrary exact version).
+- Retrained model verified to load with zero scikit-learn version-mismatch warnings, and performs at least as well as v2 (99.40% test accuracy, 99.45% macro F1, `bro_split` at 98% precision / 100% recall — all comparable-or-better than v2's numbers).
+
+Backend tests: 250 (unchanged) — this was a dependency/environment fix, not a feature or behavior change.

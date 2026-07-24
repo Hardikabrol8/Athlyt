@@ -17,7 +17,16 @@ dependencies = [
     "bcrypt>=4.2,<6.0",
     "python-multipart>=0.0.12",
     "email-validator>=2.2,<3.0",
-    "scikit-learn>=1.5,<2.0",
+    # Upper-bounded at <1.9, not just <2.0: some local dev environments
+    # resolve `sklearn-compat`, a transitive dependency of another package,
+    # which itself requires scikit-learn<1.9. An earlier attempt to pin
+    # exactly to 1.9.0 (matching whatever trained model.joblib at the time)
+    # created a real, confirmed conflict with that constraint. The model is
+    # retrained against whatever scikit-learn version this range actually
+    # resolves to (currently 1.5.2 — see ml/models/metadata.json's
+    # "sklearn_version" field for the exact version any given model.joblib
+    # was pickled with) rather than the reverse.
+    "scikit-learn>=1.5,<1.9",
     "joblib>=1.4,<2.0",
     "pandas>=2.2,<3.0",
 ]
